@@ -1,20 +1,21 @@
 ---
 name: meta-production
-description: Scored production readiness assessment (READY / CONDITIONAL / NOT READY) across 10 dimensions. Use when asking "can we ship this?" Outputs artifacts/reviews/production-readiness.md.
+description: Scored production readiness assessment (READY / CONDITIONAL / NOT READY) across 12 dimensions. Use when asking "can we ship this?" Outputs artifacts/reviews/production-readiness.md.
 ---
 
 # meta-production
 
 Production Readiness Review (PRR) — a scored, evidence-backed assessment of
-whether a project is safe to deploy to production. Inspired by Google SRE's
-PRR framework, Cortex production readiness scorecards, and DORA metrics.
+whether a project is safe to deploy to production. Based on cross-analysis of
+6 PRR frameworks: Google SRE PRR, Cortex scorecards, OpsLevel rubrics,
+Backstage Soundcheck, Port.dev, and GitLab PRR.
 
 ## Chain
 
 ```
 [Phase 1: Stack Research]     Gemini — production patterns for this stack
-[Phase 2: Parallel Scan]      7 review lenses (Sonnet) + production antipattern scan (Codex)
-[Phase 3: Scoring]            Claude — score 10 dimensions from Phase 1-2 findings
+[Phase 2: Parallel Scan]      7 review lenses (Sonnet) + production scan (5 Codex)
+[Phase 3: Scoring]            Claude — score 12 dimensions from Phase 1-2 findings
 [Phase 4: Report]             Write artifacts/reviews/production-readiness.md with verdict
 ```
 
@@ -28,22 +29,38 @@ PRR framework, Cortex production readiness scorecards, and DORA metrics.
 | Source code | `src/` or equivalent | Yes |
 | Existing review findings | Artifact DB (lens findings) | No (reused if fresh) |
 
+## Service Criticality Tier
+
+Before scoring, determine the service's criticality tier from project-context.md:
+
+| Tier | Description | Dims 11-12 Weight | Example |
+|---|---|---|---|
+| **Critical** | User-facing, revenue-impacting, or safety-critical | Full weight | Payment API, auth service |
+| **Standard** | Internal service with dependencies downstream | 70% weight | Data pipeline, admin API |
+| **Low** | Internal tool, batch job, or early-stage prototype | 40% weight | CLI tool, cron job, dev utility |
+
+Criticality affects scoring for Dims 11 (Reliability) and 12 (Capacity) only.
+A batch job doesn't need SLOs or load tests — don't penalize it for that.
+Dims 1-10 apply equally regardless of tier.
+
 ## Scoring System
 
-### 10 Dimensions (0-10 each, 100 total)
+### 12 Dimensions (0-10 each, 120 total)
 
 | # | Dimension | What It Measures | Primary Source |
 |---|---|---|---|
 | 1 | **Code Completeness** | No stubs, TODOs, placeholders, incomplete implementations | completeness-review |
 | 2 | **Code Quality** | No duplication, consistent patterns, no over-engineering, no truncation | refactor-review |
-| 3 | **Security** | No secrets, deps audited, auth solid, input validated, OWASP covered | security-review |
-| 4 | **Testing** | Coverage adequate, no stub tests, error paths tested, no fragile tests | test-review |
+| 3 | **Security** | No secrets, deps audited, auth solid, input validated, OWASP + supply chain | security-review |
+| 4 | **Testing** | Coverage adequate, no stub tests, error paths tested, mutation-aware | test-review |
 | 5 | **Documentation Sync** | Docs match code, no drift in either direction | drift-review |
-| 6 | **Compliance** | Codebase follows its own documented rules | compliance-review |
+| 6 | **Compliance** | Follows documented rules + applicable regulatory controls | compliance-review |
 | 7 | **Architecture** | Stack justified, no circular deps, scaling considered, resilient | counter-review |
-| 8 | **Observability** | Logging, metrics, tracing, health endpoints, alerting | Production scan |
-| 9 | **Deployment** | Rollback strategy, env config, graceful shutdown, container hygiene | Production scan |
-| 10 | **Operations** | Runbooks, error handling, rate limiting, resource limits, incident readiness | Production scan |
+| 8 | **Observability** | Logging, metrics, tracing, SLI-based alerting, cost-aware, correlation IDs | Production scan |
+| 9 | **Deployment** | Progressive delivery, rollback, env config, graceful shutdown, supply chain | Production scan |
+| 10 | **Operations** | Incident maturity, on-call health, rate limiting, circuit breakers, DORA infra | Production scan |
+| 11 | **Reliability** | SLO/SLI defined, error budgets, chaos readiness, resilience tested | Production scan (NEW) |
+| 12 | **Capacity** | Load test evidence, auto-scaling, capacity model, resource sizing | Production scan (NEW) |
 
 ### Scoring Rubric Per Dimension
 
@@ -60,10 +77,10 @@ PRR framework, Cortex production readiness scorecards, and DORA metrics.
 
 | Total Score | Verdict | Meaning |
 |---|---|---|
-| 85-100 | **PRODUCTION READY** | Ship it. Minor items can be addressed post-launch. |
-| 70-84 | **CONDITIONALLY READY** | Can ship if listed conditions are met first. |
-| 50-69 | **NOT READY** | Significant work required. Remediation plan provided. |
-| 0-49 | **BLOCKED** | Critical failures. Do not deploy under any circumstances. |
+| 102-120 (85%+) | **PRODUCTION READY** | Ship it. Minor items can be addressed post-launch. |
+| 84-101 (70-84%) | **CONDITIONALLY READY** | Can ship if listed conditions are met first. |
+| 60-83 (50-69%) | **NOT READY** | Significant work required. Remediation plan provided. |
+| 0-59 (<50%) | **BLOCKED** | Critical failures. Do not deploy under any circumstances. |
 
 **Override rule**: Any single dimension scoring 0-2 forces a maximum verdict
 of CONDITIONALLY READY regardless of total score. A single critical gap can
@@ -74,10 +91,11 @@ sink a deployment.
 ### Phase 1: Stack Research (Gemini)
 
 Before scanning code, research production best practices specific to this
-project's tech stack. Read `project-context.md` to identify the stack, then
-dispatch Gemini to research production hardening for it.
+project's tech stack. Read `project-context.md` to identify the stack and
+determine the service criticality tier.
 
 ```bash
+GTIMEOUT="/opt/homebrew/bin/gtimeout"
 GEMINI="/Users/trevorbyrum/.npm-global/bin/gemini"
 test -x "$GEMINI" || GEMINI="/opt/homebrew/bin/gemini"
 test -x "$GEMINI" || { echo "Gemini unavailable — skipping stack research"; }
@@ -87,11 +105,14 @@ If Gemini is available, run:
 
 ```bash
 unset DEBUG 2>/dev/null
-timeout 120 "$GEMINI" --agent generalist -p \
+$GTIMEOUT 120 "$GEMINI" -p \
   "Research production readiness best practices for a [STACK] application.
-   Cover: deployment patterns, observability requirements, security hardening,
-   performance tuning, graceful shutdown, health checks, and common production
-   antipatterns. Be specific to this stack — not generic advice.
+   Cover: deployment patterns (blue/green, canary, progressive delivery),
+   observability (SLI-based alerting, OpenTelemetry, cost-aware),
+   security hardening (supply chain, runtime security, network policies),
+   SLO/SLI definition, chaos engineering readiness, capacity planning,
+   incident response maturity, and common production antipatterns.
+   Be specific to this stack — not generic advice.
    Project context: [first 3 sections of project-context.md]" \
   2>/dev/null > /tmp/prr-stack-research.md
 ```
@@ -132,12 +153,10 @@ specific instructions from the corresponding skill:
 
 Each review-lens subagent stores its output in DB as `db_upsert '{lens}' 'findings' 'sonnet' "$CONTENT"`.
 
-#### Track B: Production Antipattern Scan (3 Codex Workers)
+#### Track B: Production Antipattern Scan (5 Codex Workers)
 
-Fan out 3 Codex instances in parallel — one per production dimension.
-Each gets a focused, single-dimension prompt for deeper analysis than a
-monolithic scan. Uses 3 of the 5 available Codex slots (leaving 2 free
-for other work).
+Fan out 5 Codex instances — one per production dimension (Dims 8-12).
+Uses all 5 available Codex slots.
 
 ```bash
 CODEX=$(ls ~/.nvm/versions/node/*/bin/codex 2>/dev/null | sort -V | tail -1)
@@ -145,57 +164,41 @@ test -x "$CODEX" || CODEX="/opt/homebrew/bin/codex"
 test -x "$CODEX" || { echo "Codex unavailable — falling back to Sonnet"; }
 ```
 
-Read `references/production-scan-prompts.md` for the full prompt text for
-each worker. If Codex is available, launch all 3 in parallel:
+Read `references/production-scan-prompts.md` for prompts for Dims 8-10.
+Read `references/reliability-capacity-prompts.md` for prompts for Dims 11-12.
 
-**Codex Worker 1 — Observability (Dimension 8):**
+Launch all 5 in parallel:
+
+**Workers 1-3** — Observability (8), Deployment (9), Operations (10):
 
 ```bash
-timeout 120 "$CODEX" exec --ephemeral --sandbox read-only \
+$GTIMEOUT 120 "$CODEX" exec --ephemeral --sandbox read-only --skip-git-repo-check \
   --cd /path/to/project \
-  "[observability prompt from references/production-scan-prompts.md]" \
-  2>/dev/null > /tmp/prr-observability.md &
-CODEX_PID_1=$!
+  "[prompt from references/production-scan-prompts.md]" \
+  2>/dev/null > /tmp/prr-{dimension}.md &
 ```
 
-**Codex Worker 2 — Deployment (Dimension 9):**
+**Workers 4-5** — Reliability (11), Capacity (12):
 
 ```bash
-timeout 120 "$CODEX" exec --ephemeral --sandbox read-only \
+$GTIMEOUT 120 "$CODEX" exec --ephemeral --sandbox read-only --skip-git-repo-check \
   --cd /path/to/project \
-  "[deployment prompt from references/production-scan-prompts.md]" \
-  2>/dev/null > /tmp/prr-deployment.md &
-CODEX_PID_2=$!
+  "[prompt from references/reliability-capacity-prompts.md]" \
+  2>/dev/null > /tmp/prr-{dimension}.md &
 ```
 
-**Codex Worker 3 — Operations (Dimension 10):**
+Wait for all 5 and store in DB:
 
 ```bash
-timeout 120 "$CODEX" exec --ephemeral --sandbox read-only \
-  --cd /path/to/project \
-  "[operations prompt from references/production-scan-prompts.md]" \
-  2>/dev/null > /tmp/prr-operations.md &
-CODEX_PID_3=$!
-```
-
-Wait for all 3 Codex workers and store results in DB:
-
-```bash
-wait $CODEX_PID_1
 source artifacts/db.sh
-db_upsert 'meta-production' 'scan' 'observability' "$(cat /tmp/prr-observability.md)"
-rm /tmp/prr-observability.md
-
-wait $CODEX_PID_2
-db_upsert 'meta-production' 'scan' 'deployment' "$(cat /tmp/prr-deployment.md)"
-rm /tmp/prr-deployment.md
-
-wait $CODEX_PID_3
-db_upsert 'meta-production' 'scan' 'operations' "$(cat /tmp/prr-operations.md)"
-rm /tmp/prr-operations.md
+for dim in observability deployment operations reliability capacity; do
+  wait $CODEX_PID
+  db_upsert 'meta-production' 'scan' "$dim" "$(cat /tmp/prr-$dim.md)"
+  rm /tmp/prr-$dim.md
+done
 ```
 
-If Codex is unavailable, run these 3 checks as Sonnet subagents instead.
+If Codex is unavailable, run these 5 checks as Sonnet subagents instead.
 Less depth but still covers the patterns via grep and file analysis.
 
 #### Track C: Production Research Cross-Reference (Gemini)
@@ -205,7 +208,7 @@ While Track A and B run, have Gemini cross-reference the stack research
 
 ```bash
 unset DEBUG 2>/dev/null
-timeout 120 "$GEMINI" --agent codebase_investigator -p \
+$GTIMEOUT 120 "$GEMINI" -p \
   "Compare these production best practices against the actual codebase.
    For each practice, mark it as: IMPLEMENTED, PARTIALLY IMPLEMENTED,
    or MISSING. Cite specific files and lines.
@@ -216,8 +219,6 @@ source artifacts/db.sh
 db_upsert 'meta-production' 'scan' 'practices-audit' "$(cat /tmp/prr-practices.md)"
 rm /tmp/prr-practices.md
 ```
-
-Stack research (`/tmp/prr-stack-research.md`) can remain a temp file — it's consumed immediately and doesn't need persistence.
 
 If Gemini is unavailable, skip this track. It enriches the report but
 isn't required for scoring.
@@ -256,8 +257,6 @@ Adjust within the range based on MEDIUM/LOW count and finding severity.
 
 **For Dimensions 8-10** (production scans):
 
-Read each dimension's scan from the artifact DB:
-
 ```bash
 source artifacts/db.sh
 OBSERVABILITY=$(db_read 'meta-production' 'scan' 'observability')
@@ -265,8 +264,6 @@ DEPLOYMENT=$(db_read 'meta-production' 'scan' 'deployment')
 OPERATIONS=$(db_read 'meta-production' 'scan' 'operations')
 PRACTICES=$(db_read 'meta-production' 'scan' 'practices-audit')
 ```
-
-Each Codex worker focused on a single dimension, so findings map 1:1. Score based on:
 
 | Findings | Score |
 |---|---|
@@ -277,12 +274,21 @@ Each Codex worker focused on a single dimension, so findings map 1:1. Score base
 | Category barely addressed | 1-2 |
 | No evidence of any production consideration | 0 |
 
+**For Dimensions 11-12** (reliability + capacity, criticality-weighted):
+
+```bash
+RELIABILITY=$(db_read 'meta-production' 'scan' 'reliability')
+CAPACITY=$(db_read 'meta-production' 'scan' 'capacity')
+```
+
+Apply service criticality tier weighting. Read `references/slo-chaos-dora-checks.md`
+for detailed scoring criteria per tier. Chaos readiness scores as a maturity
+indicator — higher is better, but absence doesn't block.
+
 **Cross-validation**: Compare each Codex worker's findings against the
-Gemini practices audit (Track C) for the same dimension. If they
-contradict, investigate the discrepancy before finalizing the score.
-The more conservative (lower) score wins unless you can verify the
-optimistic assessment. When both Codex and Gemini agree on an issue,
-boost its confidence to HIGH.
+Gemini practices audit (Track C). If they contradict, investigate. The more
+conservative score wins unless you can verify the optimistic assessment.
+When both agree, boost confidence to HIGH.
 
 ### Phase 4: Report
 
@@ -305,7 +311,7 @@ Then offer next steps:
 > 1. **Fix blockers** — address the P0 items and re-run `/meta-production`
 > 2. **Detailed dive** — review a specific dimension in depth
 > 3. **Accept risk** — proceed to deployment with documented gaps
-> 4. **Full review** — run `/meta-review` for the complete 21-review sweep"
+> 4. **Full review** — run `/meta-review` for the complete review sweep"
 
 ## Reuse of Existing Reviews
 
@@ -317,9 +323,9 @@ AGE=$(db_age_hours '{lens}' 'findings' 'sonnet')
 ```
 
 If `$AGE` is non-empty and < 24, reuse that lens's findings instead of re-running it.
-This allows the user to run `/meta-review` first for the full 21-review treatment,
+This allows the user to run `/meta-review` first for the full review treatment,
 then run `/meta-production` which picks up those findings from the DB and adds the
-production-specific dimensions (8-10) and scoring.
+production-specific dimensions (8-12) and scoring.
 
 If existing findings are older than 24 hours (or absent), re-run those lenses — the
 codebase may have changed.
@@ -328,11 +334,11 @@ codebase may have changed.
 
 - If Gemini is unavailable: use Claude WebSearch for stack research (Phase 1),
   skip Track C (practices audit). Note in methodology section.
-- If Codex is unavailable: run production antipattern checks as a Sonnet
-  subagent instead. Note reduced scan depth in methodology.
+- If Codex is unavailable: run production antipattern checks as Sonnet
+  subagents instead. Note reduced scan depth in methodology.
 - If both are unavailable: all scans run via Sonnet subagents. The report
   is still valid but note "single-model assessment" in methodology and
-  reduce confidence in Dimensions 8-10 scoring.
+  reduce confidence in Dimensions 8-12 scoring.
 - If a review lens fails: score that dimension 0 and note "assessment
   incomplete" in the scorecard.
 
@@ -340,30 +346,28 @@ codebase may have changed.
 
 ```
 User: "Is this ready for production?"
-Action: Read project-context.md for stack. Phase 1 — Gemini researches
-        production patterns for the stack. Phase 2 — fan out 7 review lenses
-        + Codex antipattern scan + Gemini practices audit. Phase 3 — score
-        all 10 dimensions. Phase 4 — write artifacts/reviews/production-readiness.md. Present
-        verdict and scorecard.
+Action: Read project-context.md for stack + criticality tier. Phase 1 — Gemini
+        researches production patterns. Phase 2 — 7 review lenses + 5 Codex
+        production scans + Gemini practices audit. Phase 3 — score all 12
+        dimensions (weight Dims 11-12 by tier). Phase 4 — write report.
 ```
 
 ```
 User: "/meta-production"
-Action: Full PRR flow. All 4 phases.
+Action: Full PRR flow. All 4 phases, 12 dimensions.
 ```
 
 ```
 User: "We already ran a full review, just check production readiness"
-Action: Check artifact DB for fresh lens findings (db_age_hours < 24). Reuse them
-        for Dimensions 1-7. Run only the production-specific scans (Codex + Gemini) for
-        Dimensions 8-10. Score and report.
+Action: Check artifact DB for fresh lens findings (db_age_hours < 24). Reuse
+        for Dims 1-7. Run only production scans (5 Codex + Gemini) for Dims
+        8-12. Score and report.
 ```
 
 ```
 User: "Re-check production readiness after fixing the blockers"
-Action: Re-run only the dimensions that scored below 7. Reuse passing
-        dimensions from the previous report. Update artifacts/reviews/production-readiness.md
-        with new scores and revised verdict.
+Action: Re-run only dimensions that scored below 7. Reuse passing dimensions.
+        Update report with new scores and revised verdict.
 ```
 
 ---
