@@ -5,13 +5,17 @@
 
 ## Notes (Newest First)
 
+### CN-20260311-221000-CLAUDE
+- Pushed to GitHub: 435099f (27 files, +5513 lines)
+- Semgrep MCP added to ~/.mcp.json (local, no API cost)
+- Handoff stored in qdrant memory for home Claude pickup
+- Remaining for next session: SonarQube MCP connection (needs tower IP + token), meta-review SAST integration, pre-commit hook test
+
 ### CN-20260311-220000-CLAUDE
 - Installed 5 local tools: ruff 0.15.5, semgrep 1.154.0, gitleaks 8.30.0, biome 2.4.6, oxlint 1.53.0
-- Deployed SonarQube Community Edition on Unraid (container: sonarqube, traefik_proxy network, sonarqube.8-bit-byrum.com)
+- Deployed SonarQube Community Edition on Unraid (container: sonarqube, port 9000, no web exposure)
 - Recipe stored in Vault for redeployment
-- User chose standalone SonarQube MCP (not gateway integration), no web exposure needed
-- Building: new pre-commit hook (deterministic linters + secret scan before Codex)
-- Pending: Semgrep MCP connection, SonarQube MCP connection, meta-review SAST integration
+- Rewrote pre-commit hook: 3-phase (Gitleaks → Ruff/Biome/oxlint → Codex)
 
 ### CN-20260311-213500-CLAUDE
 - Deep research 005D (free tools augmentation) completed — 66 queries, ~654 scanned, ~256 cited

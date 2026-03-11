@@ -9,6 +9,8 @@
 |---|------|-------|--------|-------|-------|
 | 1 | Trim all skill descriptions to ≤150 chars | claude | open | 2026-03-07 | Prevent silent skill exclusion from description budget |
 | 2 | Make 7 review skills thin wrappers with shared logic | claude | open | 2026-03-07 | Reduce duplication; shared output format, severity, dispatch |
+| 2a | Troubleshoot Codex/Gemini in subagents | claude | open | 2026-03-11 | Codex: probably need to run `codex app server` (background daemon) so subagents can connect. Gemini: still timing out in subagents. Both worked interactively but fail in background/subagent shells. |
+| 2b | Add project docs (cnotes, features, todo) to meta-init scaffold | claude | open | 2026-03-11 | meta-init should create these files during project init |
 
 ## P1 — High Impact
 
@@ -16,6 +18,8 @@
 |---|------|-------|--------|-------|-------|
 | 3 | Deep research: test-review skill upgrade | claude | done | 2026-03-11 | 003D complete — 45+ sources, 6 gaps found. Apply next. |
 | 4 | Deep research: meta-production skill upgrade | claude | done | 2026-03-11 | 004D complete — 127 cited, 11 sub-questions, 6 contested. Apply next. |
+| 4a | Connect SonarQube MCP | claude | open | 2026-03-11 | Needs tower Tailscale IP + SonarQube token. Add to ~/.mcp.json |
+| 4b | Update meta-review Phase 1 with SAST integration | claude | open | 2026-03-11 | Run Semgrep/Ruff/Biome before LLM reviews, pipe SARIF output. Highest leverage. |
 | 5 | Add fresh-findings reuse to all review skills | claude | open | 2026-03-07 | Stop duplicate scans (<24h check) |
 | 6 | Add Gemini to project-questions | claude | open | 2026-03-07 | Domain/competitor research before interview |
 | 7 | Add Opus subagent for meta-review synthesis | claude | open | 2026-03-07 | Better cross-lens pattern detection |

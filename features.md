@@ -17,6 +17,13 @@
 | GitHub sync | done | Repo initialized and pushed to trevorbyrum/claude-skills-suite | 2026-03-11 | |
 | test-review upgrade | done | Mutation testing, PBT, contract testing, strategy shapes, LLM anti-patterns, metrics | 2026-03-11 | 003D research applied. SKILL.md 273 lines + 6 reference files |
 | meta-production upgrade | done | 12 dims (was 10), SLO/SLI, chaos, DORA, capacity, progressive delivery, supply chain, incident maturity | 2026-03-11 | 004D research applied. SKILL.md + 4 reference files |
+| Deterministic pre-commit hook | done | 3-phase: Gitleaks secrets → Ruff/Biome/oxlint lint → Codex semantic | 2026-03-11 | Replaces Codex-only hook |
+| Local linter toolchain | done | ruff, semgrep, gitleaks, biome, oxlint installed on macOS | 2026-03-11 | brew + npm global |
+| SonarQube deployment | done | Community Edition on Unraid, port 9000, recipe in Vault | 2026-03-11 | No web exposure |
+| Semgrep MCP | done | Connected in ~/.mcp.json, local scanning | 2026-03-11 | |
+| 005D free tools research | done | 66 queries, 256 cited sources on tools to reduce bugs/drift | 2026-03-11 | Summary: artifacts/research/summary/005D |
+| SonarQube MCP | in-progress | Needs tower IP + token to complete connection | 2026-03-11 | Standalone Docker MCP |
+| Meta-review SAST integration | planned | Run deterministic tools before LLM reviews, pipe SARIF output | 2026-03-11 | Highest-leverage remaining change |
 | Review skill thin wrappers | planned | Shared logic for 7 review lenses, reduce duplication | 2026-03-07 | P0 from skill audit |
 | Fresh-findings reuse | planned | Skip duplicate scans if results <24h old | 2026-03-07 | P1 — stops redundant work |
 | Gemini in project-questions | planned | Domain/competitor research before user interview | 2026-03-07 | P1 |
