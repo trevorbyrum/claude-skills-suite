@@ -115,7 +115,7 @@ For each deliverable listed in `project-plan.md`:
 
 ### 4. Produce Findings
 
-Write findings to the output file with this structure per finding:
+Format each finding using this structure (store via `db_upsert` as shown in Outputs above):
 
 ```
 ## [SEVERITY] Finding Title

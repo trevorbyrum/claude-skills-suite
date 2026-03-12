@@ -21,10 +21,6 @@ After completing work, update:
 - `todo.md` — mark completed items, add new ones discovered
 - `features.md` — if your work changed what the product does
 
-## Context Management
-
-IMPORTANT: When context usage reaches 80% or higher, run the `/meta-compact` skill to preserve session state before continuing. Do not wait until context is full — by then it is too late for a clean save.
-
 ## Evolve
 
 If your work changes architecture, tech stack, or key decisions:

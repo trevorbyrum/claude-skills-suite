@@ -31,24 +31,14 @@ until the project is well-defined enough to plan against.
 
 Before interviewing the user, ground yourself in the project's domain:
 
-1. Check Gemini availability: `which gemini >/dev/null 2>&1`
-2. If available, run domain research:
-   ```bash
-   unset DEBUG 2>/dev/null
-   GTIMEOUT="/opt/homebrew/bin/gtimeout"; GEMINI="/Users/trevorbyrum/.npm-global/bin/gemini"
-   test -x "$GEMINI" || GEMINI="/opt/homebrew/bin/gemini"
-   $GTIMEOUT 120 "$GEMINI" --agent generalist -p \
-     "Research the domain of [PROJECT_DESCRIPTION]. Cover: key terminology, common patterns, existing solutions, market landscape, and common pitfalls. Be specific and practical — this will inform a project interview." \
-     2>/dev/null
-   ```
+1. Load `/gemini` for invocation syntax.
+2. If available, run domain research. Key params: `--agent generalist`, 120s timeout.
+   Prompt: `"Research the domain of [PROJECT_DESCRIPTION]. Cover: key terminology,
+   common patterns, existing solutions, market landscape, and common pitfalls.
+   Be specific and practical — this will inform a project interview."`.
 3. Use the research output to ask better, more informed questions during the interview. Reference specific domain knowledge to surface assumptions the user might not think to mention.
-4. If Gemini is unavailable or fails, retry with Copilot:
-   ```bash
-   COPILOT="/opt/homebrew/bin/copilot"
-   $GTIMEOUT 120 "$COPILOT" --allow-all-tools --no-ask-user --no-color --disable-builtin-mcps -s \
-     -p "Research the domain of [PROJECT_DESCRIPTION]. Cover: key terminology, common patterns, existing solutions, market landscape, and common pitfalls. Be specific and practical — this will inform a project interview." \
-     2>/dev/null
-   ```
+4. If Gemini is unavailable or fails, retry with Copilot — load `/copilot`
+   for invocation syntax. Same prompt, 120s timeout.
 5. If both Gemini and Copilot fail, proceed without domain research — the interview still works, just with less domain grounding.
 
 1. **Open with a summary.** Restate what you understood from the user's

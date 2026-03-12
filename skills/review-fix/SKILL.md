@@ -113,12 +113,8 @@ which fixes to implement. The user may also:
 
 #### Worker Pool Setup
 
-Check Codex availability:
-```bash
-CODEX=$(ls ~/.nvm/versions/node/*/bin/codex 2>/dev/null | sort -V | tail -1)
-test -x "$CODEX" || CODEX="/opt/homebrew/bin/codex"
-test -x "$CODEX" && echo "codex: available" || echo "codex: unavailable"
-```
+Check Codex availability — load `/codex` for the path discovery pattern.
+Note whether Codex is available or unavailable.
 
 **Pool limits** (from `general.md`):
 - Codex: **5 concurrent** exec processes
@@ -143,14 +139,9 @@ The context package contains:
 
 For each approved fix unit, dispatch a worker:
 
-**Codex worker:**
-```bash
-CODEX=$(ls ~/.nvm/versions/node/*/bin/codex 2>/dev/null | sort -V | tail -1)
-test -x "$CODEX" || CODEX="/opt/homebrew/bin/codex"
-GTIMEOUT="/opt/homebrew/bin/gtimeout"; test -x "$GTIMEOUT" || GTIMEOUT="/opt/homebrew/bin/timeout"
-$GTIMEOUT 120 "$CODEX" exec --ephemeral --skip-git-repo-check --sandbox workspace-write \
-  -C <project-root> "FIXER_PROMPT" 2>/dev/null
-```
+**Codex worker** — load `/codex` for invocation syntax. Key params:
+`--sandbox workspace-write`, `--ephemeral`, `--cd <project-root>`, 180s timeout.
+Prompt: `FIXER_PROMPT` (from `agents/fixer.md` with all placeholders filled).
 
 **Sonnet fallback:**
 Use `isolation: "worktree"` for parallel subagents. Each receives the same

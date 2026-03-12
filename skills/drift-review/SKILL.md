@@ -99,16 +99,14 @@ picture of the system.
 
 After comparing docs to code, run a reverse check — find things in code that docs don't mention:
 
-1. Check Codex availability: `which codex >/dev/null 2>&1`
-2. If available:
-   ```bash
-   CODEX=$(ls ~/.nvm/versions/node/*/bin/codex 2>/dev/null | sort -V | tail -1)
-   test -x "$CODEX" || CODEX="/opt/homebrew/bin/codex"
-   GTIMEOUT="/opt/homebrew/bin/gtimeout"; test -x "$GTIMEOUT" || GTIMEOUT="/opt/homebrew/bin/timeout"
-   $GTIMEOUT 60 "$CODEX" exec --ephemeral --sandbox read-only --skip-git-repo-check \
-     --cd <project-root> \
-     "Scan this codebase for features, endpoints, configuration options, and behaviors that are NOT documented in any .md file in the project root. List each with file:line. Focus on: API endpoints without docs, env vars without .env.example entries, CLI flags without README mention, and database tables without schema docs."
-   ```
+1. Load `/codex` for invocation syntax. If Codex is unavailable, skip to step 4.
+2. If available, dispatch a Codex worker. Key params: `--sandbox read-only`,
+   `--ephemeral`, `--cd <project-root>`, 120s timeout.
+   Prompt: `"Scan this codebase for features, endpoints, configuration options,
+   and behaviors that are NOT documented in any .md file in the project root.
+   List each with file:line. Focus on: API endpoints without docs, env vars
+   without .env.example entries, CLI flags without README mention, and database
+   tables without schema docs."`.
 3. Add any undocumented findings to the drift report as "Code-ahead" items.
 4. If Codex is unavailable, skip this step — the standard doc-to-code comparison still runs.
 
@@ -123,7 +121,7 @@ Focus specifically on the status fields in features.md and project-plan.md:
 
 ### 5. Produce Findings
 
-Write findings to the output file with this structure per finding:
+Format each finding using this structure (store via `db_upsert` as shown in Outputs above):
 
 ```
 ## [SEVERITY] Finding Title

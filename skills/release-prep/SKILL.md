@@ -157,16 +157,13 @@ the commands but do NOT push. Tell the user to push when ready:
 
 Use Codex to generate a detailed changelog from git history:
 
-1. Check Codex availability: `which codex >/dev/null 2>&1`
-2. If available:
-   ```bash
-   CODEX=$(ls ~/.nvm/versions/node/*/bin/codex 2>/dev/null | sort -V | tail -1)
-   test -x "$CODEX" || CODEX="/opt/homebrew/bin/codex"
-   GTIMEOUT="/opt/homebrew/bin/gtimeout"; test -x "$GTIMEOUT" || GTIMEOUT="/opt/homebrew/bin/timeout"
-   $GTIMEOUT 60 "$CODEX" exec --ephemeral --sandbox read-only --skip-git-repo-check \
-     --cd <project-root> \
-     "Analyze the git log since the last release tag. For each commit, categorize as: feat/fix/refactor/docs/chore. Group by category. Write a user-facing changelog in Keep a Changelog format. Include PR numbers if available. Summarize breaking changes separately."
-   ```
+1. Load `/codex` for invocation syntax. If Codex is unavailable, skip to step 4.
+2. If available, dispatch a Codex worker. Key params: `--sandbox read-only`,
+   `--ephemeral`, `--cd <project-root>`, 120s timeout.
+   Prompt: `"Analyze the git log since the last release tag. For each commit,
+   categorize as: feat/fix/refactor/docs/chore. Group by category. Write a
+   user-facing changelog in Keep a Changelog format. Include PR numbers if
+   available. Summarize breaking changes separately."`.
 3. Use the Codex output as a draft, then refine based on cnotes.md entries and human context.
 4. If Codex is unavailable, generate the changelog manually from git log + cnotes.md.
 
@@ -174,24 +171,15 @@ Use Codex to generate a detailed changelog from git history:
 
 After the changelog is drafted, generate user-friendly release notes:
 
-1. Check Gemini availability: `which gemini >/dev/null 2>&1`
-2. If available:
-   ```bash
-   unset DEBUG 2>/dev/null
-   GTIMEOUT="/opt/homebrew/bin/gtimeout"; GEMINI="/Users/trevorbyrum/.npm-global/bin/gemini"
-   test -x "$GEMINI" || GEMINI="/opt/homebrew/bin/gemini"
-   $GTIMEOUT 60 "$GEMINI" --agent generalist -p \
-     "Convert this technical changelog into user-friendly release notes. Focus on what users care about: new features, fixed bugs, breaking changes that require action. Skip internal refactors. Write in a friendly, professional tone. Changelog: [CHANGELOG_CONTENT]" \
-     2>/dev/null
-   ```
+1. Load `/gemini` for invocation syntax.
+2. If available, invoke with 60s timeout, `--agent generalist`, prompt:
+   `"Convert this technical changelog into user-friendly release notes. Focus
+   on what users care about: new features, fixed bugs, breaking changes that
+   require action. Skip internal refactors. Write in a friendly, professional
+   tone. Changelog: [CHANGELOG_CONTENT]"`.
 3. Present both the technical changelog and user-facing notes for review.
-4. If Gemini is unavailable or fails, retry with Copilot:
-   ```bash
-   COPILOT="/opt/homebrew/bin/copilot"
-   $GTIMEOUT 60 "$COPILOT" --allow-all-tools --no-ask-user --no-color --disable-builtin-mcps -s \
-     -p "Convert this technical changelog into user-friendly release notes. Focus on what users care about: new features, fixed bugs, breaking changes that require action. Skip internal refactors. Write in a friendly, professional tone. Changelog: [CHANGELOG_CONTENT]" \
-     2>/dev/null
-   ```
+4. If Gemini is unavailable or fails, retry with Copilot — load `/copilot`
+   for invocation syntax. Same prompt, 60s timeout.
 5. If both Gemini and Copilot fail, skip user-facing notes — the technical changelog is sufficient.
 
 ## Why Two Sources

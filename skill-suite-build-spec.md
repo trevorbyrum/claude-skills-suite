@@ -558,22 +558,29 @@ The cross-cutting rules are:
 - **Outputs**: Codex CLI output written to specified file
 - **Exit condition**: Output file written, or fallback noted
 - **Subagent**: No (this IS the external call)
-- **Availability check**: `which codex >/dev/null 2>&1`
+- **Availability check**: Resolve dynamically from NVM first, then Homebrew, then prepend the resolved bin dir to `PATH` so the wrapper can find `node`:
+  `CODEX=$(ls ~/.nvm/versions/node/*/bin/codex 2>/dev/null | sort -V | tail -1); test -x "$CODEX" || CODEX="/opt/homebrew/bin/codex"; test -x "$CODEX" && export PATH="$(dirname "$CODEX"):$PATH"; test -x "$CODEX"`
 - **Concurrency limit**: 5 simultaneous `codex exec` processes. The orchestrating agent must track active slots and queue excess work. Track via `/tmp/codex-slots.pid` — before launching, count active PIDs in the file (`ps -p` to verify still running, prune dead entries). If 5 active, queue and retry after the next slot frees. This is best-effort — the file is a coordination hint, not a hard lock.
 - **Task-type templates**:
 
   **Code review (read-only, safest):**
   ```bash
-  RESULT=$(timeout 120 codex exec --ephemeral --sandbox read-only \
-    --cd <project-root> \
+  RESULT=$($GTIMEOUT 120 "$CODEX" exec --ephemeral --skip-git-repo-check \
+    -c 'mcp_servers.homelab-gateway.enabled=false' \
+    -c 'mcp_servers.ssh-tower.enabled=false' \
+    -c 'mcp_servers.github.enabled=false' \
+    --sandbox read-only -C <project-root> \
     "PROMPT" 2>/dev/null)
   echo "$RESULT" > OUTPUT_FILE
   ```
 
   **Code review with high reasoning:**
   ```bash
-  RESULT=$(timeout 120 codex exec --ephemeral --sandbox read-only \
-    --cd <project-root> \
+  RESULT=$($GTIMEOUT 120 "$CODEX" exec --ephemeral --skip-git-repo-check \
+    -c 'mcp_servers.homelab-gateway.enabled=false' \
+    -c 'mcp_servers.ssh-tower.enabled=false' \
+    -c 'mcp_servers.github.enabled=false' \
+    --sandbox read-only -C <project-root> \
     -c model_reasoning_effort="high" \
     "PROMPT" 2>/dev/null)
   echo "$RESULT" > OUTPUT_FILE
@@ -581,48 +588,55 @@ The cross-cutting rules are:
 
   **Code generation / file writes (implementation work):**
   ```bash
-  timeout 120 codex exec --full-auto --ephemeral --cd /path/to/project \
+  $GTIMEOUT 180 "$CODEX" exec --ephemeral --skip-git-repo-check \
+    -c 'mcp_servers.homelab-gateway.enabled=false' \
+    -c 'mcp_servers.ssh-tower.enabled=false' \
+    -c 'mcp_servers.github.enabled=false' \
+    --sandbox workspace-write -C /path/to/project \
     "PROMPT" 2>/dev/null
   ```
 
   **Structured output (for downstream parsing):**
   ```bash
-  timeout 120 codex exec --ephemeral --output-schema /path/to/schema.json \
+  $GTIMEOUT 120 "$CODEX" exec --ephemeral --skip-git-repo-check \
+    --output-schema /path/to/schema.json \
     -o OUTPUT_FILE \
     "PROMPT" 2>/dev/null
   ```
 
   **Write final message to file:**
   ```bash
-  timeout 120 codex exec --ephemeral -o OUTPUT_FILE \
+  $GTIMEOUT 120 "$CODEX" exec --ephemeral --skip-git-repo-check -o OUTPUT_FILE \
     "PROMPT" 2>/dev/null
   ```
 
   **Long prompt via stdin:**
   ```bash
-  timeout 120 codex exec --ephemeral - < /path/to/prompt.md 2>/dev/null
+  $GTIMEOUT 120 "$CODEX" exec --ephemeral --skip-git-repo-check - < /path/to/prompt.md 2>/dev/null
   ```
 
   **With additional read-only directories:**
   ```bash
-  timeout 120 codex exec --ephemeral --cd /project --add-dir /shared/libs \
+  $GTIMEOUT 120 "$CODEX" exec --ephemeral --skip-git-repo-check -C /project --add-dir /shared/libs \
     "PROMPT" 2>/dev/null
   ```
 
 - **Critical gotchas**:
-  - ALWAYS wrap with `timeout` — hangs indefinitely if out of credits
-  - Default sandbox is READ-ONLY in exec mode — need `--full-auto` or `--sandbox workspace-write` for file writes
+  - ALWAYS wrap with `$GTIMEOUT` — hangs indefinitely if out of credits or the network stalls
+  - If Codex came from NVM, prepend `$(dirname "$CODEX")` to `PATH` before running it so `/usr/bin/env node` can resolve
+  - `-p` is `--profile`, NOT prompt. The prompt is a positional final argument.
+  - Default sandbox is READ-ONLY in exec mode — use `--sandbox workspace-write` for file writes
   - Network is blocked by default in `workspace-write` sandbox
-  - Requires git repo by default — use `--skip-git-repo-check` for non-repo contexts
+  - Use `--skip-git-repo-check` on all headless invocations. It is harmless in repos and required outside them.
   - `--ephemeral` for one-shot tasks (don't persist session state)
-  - macOS seatbelt silently ignores `network_access = true` in some configurations
+  - For lightweight local tasks, disable MCP servers with `-c 'mcp_servers.<name>.enabled=false'` to avoid startup latency
   - `codex exec fork` doesn't exist — use `codex exec resume --last` instead
-  - Flag placement matters: global flags go AFTER `exec`: `codex exec --full-auto "prompt"` not `codex --full-auto exec "prompt"`
+  - Flag placement matters: global flags go AFTER `exec`, and the prompt goes LAST
   - Auto-cancels all elicitation requests in exec mode
   - Long prompts: prefer `codex exec - < file.md` over inline quoting
-  - There is NO `-C` flag — use `--cd <DIR>`
+  - `-C` is valid shorthand for `--cd <DIR>`
   - `--json` outputs JSONL event stream, not a single JSON object — avoid for simple output capture
-  - Model: `gpt-5.3-codex` (current default), reasoning effort: `minimal|low|medium|high|xhigh`
+  - Model comes from `~/.codex/config.toml` (currently `gpt-5.4` on this machine), reasoning effort: `minimal|low|medium|high`
   - For headless: use `OPENAI_API_KEY` env var, not ChatGPT subscription OAuth
 - **Strengths**: Code review and quality analysis, test generation, structured output via `--output-schema`, fast code generation, code pattern detection
 - **Weaknesses**: Network blocked by default, non-code tasks, can hang on credit exhaustion, auto-cancels interactive prompts
@@ -647,10 +661,10 @@ The cross-cutting rules are:
   4. All templates exist
   5. references/cross-cutting-rules.md exists
   6. `which gemini` — available or not
-  7. `which codex` — available or not
+  7. Resolve Codex dynamically (NVM path first, then `/opt/homebrew/bin/codex`) — available or not
   8. Hook configuration in settings.json points to correct paths
   9. Gemini CLI responds to `gemini --version`
-  10. Codex CLI responds to `codex --version`
+  10. Resolved Codex CLI responds to `"$CODEX" --version`
   11. `which jq` — required by hook scripts for JSON parsing
 
 ### 24. release-prep

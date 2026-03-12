@@ -59,21 +59,25 @@
 
 ## AI CLI Delegation
 
-Six CLIs available. Full syntax in `/gemini`, `/codex`, `/copilot`, `/cursor`, and `/vibe` skills.
+Six CLIs available. **Load the driver skill** (`/gemini`, `/codex`, `/copilot`, `/cursor`, `/vibe`) before invoking any CLI — they are the single source of truth for syntax, path resolution, and gotchas. Do NOT duplicate CLI flags in consuming skills.
 
-- **Gemini** (`$GTIMEOUT 120 "$GEMINI" -p "..."`): web research, devil's advocate, large doc analysis. FREE.
-- **Codex** (`$GTIMEOUT 120 "$CODEX" exec --ephemeral --sandbox read-only "..."`): code review, generation, lint. $20/mo flat.
-- **Copilot** (`$GTIMEOUT 120 "$COPILOT" --allow-all-tools --no-ask-user --no-color -s -p "..."`): code review, generation, multi-model tasks. Premium request quota.
-- **Cursor** (`$GTIMEOUT 120 "$AGENT" -p --trust --force --workspace /path "PROMPT"`): code generation, review, multi-model. Cursor Pro+ (free student).
-- **Vibe** (`$GTIMEOUT 120 "$VIBE" --headless --no-prompt generate -p "PROMPT"`): fast code generation via Mistral/Codestral. Free tier.
+### Driver Skill Boundary (MANDATORY)
+
+- Any skill that dispatches **Gemini, Codex, Copilot, Cursor, or Vibe** must reference the corresponding driver skill for invocation details.
+- Consuming skills may specify only: task type, prompt contract/template, output file path, concurrency expectations, and fallback behavior.
+- Consuming skills must **NOT** embed CLI commands, flags, auth checks, PATH setup, timeout syntax, model-selection syntax, or gotcha lists for those agents.
+- If invocation details need to change, update the driver skill only. Do not patch copies of the command in downstream skills.
+- For **Vibe specifically**, prompts must be scoped to exact files, directories, or a single work unit with explicit coding instructions and success criteria. Do NOT send broad "analyze the whole project" or "figure out what to change" prompts.
+
+- **Gemini**: web research, devil's advocate, large doc analysis. FREE.
+- **Codex**: code review, generation, lint. $20/mo flat.
+- **Copilot**: code review, generation, multi-model tasks. Premium request quota.
+- **Cursor**: code generation, review, multi-model. Cursor Pro+ (free student).
+- **Vibe**: fast code generation via Mistral/Devstral. Free tier.
 - **Claude Code**: orchestrator — architecture, debugging, synthesis, final decisions.
 
-Key gotchas:
-- ALWAYS wrap all CLIs with `$GTIMEOUT` (absolute path `/opt/homebrew/bin/gtimeout`). Bare `timeout` does NOT work in subagent/background shells — it resolves to a perl alarm wrapper that kills Gemini. `unset DEBUG` before Gemini.
-- Codex exec default sandbox is READ-ONLY. Use `--sandbox workspace-write` for writes. Only use `--sandbox danger-full-access` when network access is actually required and the outer environment is already sandboxed.
-- Copilot requires `--allow-all-tools --no-ask-user` for headless use. `-p` IS the prompt flag (unlike Codex where `-p` is `--profile`). Use `--disable-builtin-mcps` for local tasks.
-- Cursor requires `-p --trust` for headless. `-p` means `--print` (headless), NOT prompt — prompt is positional (last arg). `--force` needed for writes; `--mode ask` for read-only.
-- Vibe requires `--headless --no-prompt` for headless. Without `--headless`, CLI enters interactive mode and hangs.
+Key rules:
+- ALWAYS wrap all CLIs with `$GTIMEOUT` (absolute path `/opt/homebrew/bin/gtimeout`). Bare `timeout` does NOT work in subagent/background shells.
 - Claude is ALWAYS the orchestrator. Never delegate architecture/security alone.
 - Graceful degradation if CLIs unavailable. Check dynamic path resolution in each driver skill.
 - Timeouts: 120s research/review, 180s generation, 300s complex tasks.

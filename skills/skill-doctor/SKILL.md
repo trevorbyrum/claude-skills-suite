@@ -82,7 +82,7 @@ Every skill references `cross-cutting-rules.md` in its footer. If missing, skill
 | Tool | Check | Required |
 |---|---|---|
 | `gemini` | `which gemini >/dev/null 2>&1` | Optional |
-| `codex` | `which codex >/dev/null 2>&1` | Optional |
+| `codex` | Resolve NVM/Homebrew Codex path; verify executable exists | Optional |
 | `jq` | `which jq >/dev/null 2>&1` | Required (hooks) |
 | `gh` | `which gh >/dev/null 2>&1` | Required (github-sync, repo-create) |
 

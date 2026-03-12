@@ -32,38 +32,23 @@ execution.
    and flags risks. If research was not run, note it and proceed from context
    alone. The plan will be less evidence-backed but still functional.
 
-2. **Competitive landscape check.** Call Gemini CLI for competitive context:
-   ```bash
-   gemini -p "For a project described as: [one-line summary from context]. \
-   List the top 5 competing or similar projects/products. For each: name, \
-   what it does, strengths, weaknesses, and what this project could learn \
-   from it. Bullet points only." -o text -y \
-   > /tmp/competitive-landscape.md
-   ```
+2. **Competitive landscape check.** Load `/gemini` for invocation syntax.
+   Key params: 120s timeout, prompt: `"For a project described as: [one-line
+   summary from context]. List the top 5 competing or similar projects/products.
+   For each: name, what it does, strengths, weaknesses, and what this project
+   could learn from it. Bullet points only."`. Output to
+   `/tmp/competitive-landscape.md`.
    Read the output and incorporate relevant insights into the plan (especially
    "lessons learned" and "differentiation"). If Gemini is unavailable or fails,
-   retry with Copilot:
-   ```bash
-   COPILOT="/opt/homebrew/bin/copilot"
-   $GTIMEOUT 120 "$COPILOT" --allow-all-tools --no-ask-user --no-color --disable-builtin-mcps -s \
-     -p "For a project described as: [one-line summary from context]. List the top 5 competing or similar projects/products. For each: name, what it does, strengths, weaknesses, and what this project could learn from it. Bullet points only." \
-     2>/dev/null > /tmp/competitive-landscape.md
-   ```
-   If both fail, skip and note it.
+   retry with Copilot — load `/copilot` for invocation syntax. Same prompt,
+   same output file. If both fail, skip and note it.
 
-3. **Technical feasibility check.** Call Codex CLI for a quick sanity check on
-   the proposed tech stack:
-   ```bash
-   CODEX=$(ls ~/.nvm/versions/node/*/bin/codex 2>/dev/null | sort -V | tail -1)
-   test -x "$CODEX" || CODEX="/opt/homebrew/bin/codex"
-   GTIMEOUT="/opt/homebrew/bin/gtimeout"; test -x "$GTIMEOUT" || GTIMEOUT="/opt/homebrew/bin/timeout"
-   $GTIMEOUT 60 "$CODEX" exec --ephemeral --sandbox read-only --skip-git-repo-check \
-     -o /tmp/feasibility-check.txt -C /tmp \
-     "Given this tech stack: [stack from context]. And this scope: \
-   [scope summary]. Flag any technical risks: library maturity issues, known \
-   scaling problems, integration pain points, or missing pieces. Be specific." \
-   2>/dev/null
-   ```
+3. **Technical feasibility check.** Load `/codex` for invocation syntax.
+   Key params: `--sandbox read-only`, `--ephemeral`, `--cd /tmp`, 120s timeout.
+   Prompt: `"Given this tech stack: [stack from context]. And this scope:
+   [scope summary]. Flag any technical risks: library maturity issues, known
+   scaling problems, integration pain points, or missing pieces. Be specific."`.
+   Output to `/tmp/feasibility-check.txt`.
    Read the output and factor risks into the plan. If Codex is unavailable,
    skip and note it.
 
@@ -185,20 +170,15 @@ After the user approves the plan, offer to generate skeleton files:
 > "Plan approved. Want me to generate skeleton files (interfaces, types, module stubs) for the work units? This gives implementation a head start."
 
 If yes:
-1. Check Codex availability: `which codex >/dev/null 2>&1`
-2. If available, for each work unit that creates new files:
-   ```bash
-   CODEX=$(ls ~/.nvm/versions/node/*/bin/codex 2>/dev/null | sort -V | tail -1)
-   test -x "$CODEX" || CODEX="/opt/homebrew/bin/codex"
-   GTIMEOUT="/opt/homebrew/bin/gtimeout"; test -x "$GTIMEOUT" || GTIMEOUT="/opt/homebrew/bin/timeout"
-   $GTIMEOUT 60 "$CODEX" exec --ephemeral --skip-git-repo-check --sandbox workspace-write \
-     --cd <project-root> \
-     "Generate skeleton files for this work unit. Create the file structure with interfaces, type definitions, function signatures (with TODO bodies), and module exports. Do NOT implement business logic — just the structure.
-
-     Work unit: [DESCRIPTION]
-     Tech stack: [FROM PROJECT CONTEXT]
-     Files to create: [FROM PLAN]"
-   ```
+1. Load `/codex` for invocation syntax. If Codex is unavailable, skip.
+2. If available, for each work unit that creates new files, dispatch a Codex
+   worker. Key params: `--sandbox workspace-write`, `--ephemeral`,
+   `--cd <project-root>`, 180s timeout.
+   Prompt: `"Generate skeleton files for this work unit. Create the file
+   structure with interfaces, type definitions, function signatures (with TODO
+   bodies), and module exports. Do NOT implement business logic — just the
+   structure. Work unit: [DESCRIPTION] Tech stack: [FROM PROJECT CONTEXT]
+   Files to create: [FROM PLAN]"`.
 3. If Codex is unavailable, skip — this is a convenience step, not required.
 
 ## Examples

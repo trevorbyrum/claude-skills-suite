@@ -20,7 +20,6 @@ Preserve session state before compacting or clearing context. Two modes:
 | `/meta-context-save --clear` | Clear |
 | "wrap up", "done for today" | Clear |
 | "save session", "compact" | Compact |
-| Stop hook (>=80% context, task done) | Compact |
 | "start fresh", "new session" | Clear |
 
 ## Instructions
@@ -131,11 +130,6 @@ COMPACT=$(db_read 'meta-context-save' 'compact' 'claude')
 Code gets pushed first because unpushed code in a cleared context is lost code — the next session won't have it in the working tree (if on a different device) and won't know it existed. The compact state is stored second because it needs to reference the commit. The review happens last because it validates everything.
 
 ## Examples
-
-```
-[Stop hook fires: context >= 80%, current task complete]
-```
-Compact mode. Store compact state in DB capturing completed work and what's next. Subagent review. Correct. Execute /compact.
 
 ```
 User: I'm done for today, wrap up

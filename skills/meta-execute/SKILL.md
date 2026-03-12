@@ -122,33 +122,15 @@ Wave assignments are visible and correct.
 
 ### Phase 2: Worker Pool Setup [Inline]
 
-Check availability of all CLIs:
-```bash
-GTIMEOUT="/opt/homebrew/bin/gtimeout"
-test -x "$GTIMEOUT" || GTIMEOUT="/opt/homebrew/bin/timeout"
+Check availability of all CLIs. Load each driver skill for its path
+discovery pattern:
+- `/vibe` — generation CLI path discovery
+- `/cursor` — Cursor Agent CLI path discovery
+- `/codex` — Codex CLI path discovery
+- `/copilot` — Copilot CLI path discovery
+- `/gemini` — Gemini CLI path discovery
 
-# Generation CLIs
-VIBE=$(command -v vibe 2>/dev/null)
-test -x "$VIBE" || VIBE="$HOME/.local/bin/vibe"
-test -x "$VIBE" || VIBE="/usr/local/bin/vibe"
-test -x "$VIBE" && echo "vibe: available" || echo "vibe: unavailable"
-
-AGENT=$(command -v agent 2>/dev/null)
-test -x "$AGENT" || AGENT="$HOME/.local/bin/agent"
-test -x "$AGENT" || AGENT="/usr/local/bin/agent"
-test -x "$AGENT" && echo "cursor: available" || echo "cursor: unavailable"
-
-# Review CLIs
-CODEX=$(ls ~/.nvm/versions/node/*/bin/codex 2>/dev/null | sort -V | tail -1)
-test -x "$CODEX" || CODEX="/opt/homebrew/bin/codex"
-test -x "$CODEX" && echo "codex: available" || echo "codex: unavailable"
-
-COPILOT="/opt/homebrew/bin/copilot"
-test -x "$COPILOT" && echo "copilot: available" || echo "copilot: unavailable"
-
-GEMINI=$(command -v gemini 2>/dev/null)
-test -x "$GEMINI" && echo "gemini: available" || echo "gemini: unavailable"
-```
+Note which CLIs are available (available / unavailable) before proceeding.
 
 **Generation requires both Vibe AND Cursor** for cross-model Best-of-2. If
 either is unavailable, fall back:
@@ -212,18 +194,12 @@ same-model N>1 (SWE-Master TTS, S* framework).
 
 1. Dispatch both generators with the **same prompt** (from `agents/worker.md`):
 
-   **Vibe candidate** — write prompt to file, invoke headless:
-   ```bash
-   $GTIMEOUT 180 "$VIBE" --headless --no-prompt --model codestral-latest \
-     generate -p "$(cat /tmp/wu-{ID}-prompt.md)" 2>/dev/null > /tmp/wu-{ID}-vibe.md
-   ```
-
-   **Cursor candidate** — uses worktree for isolated writes:
-   ```bash
-   $GTIMEOUT 300 "$AGENT" -p --trust --force -w wu-{ID}-cursor \
-     --model sonnet-4.6-thinking --workspace <project-root> \
-     "$(cat /tmp/wu-{ID}-prompt.md)" 2>/dev/null
-   ```
+   - **Vibe candidate** — load `/vibe` for invocation syntax. Write prompt to
+     `/tmp/wu-{ID}-prompt.md`, invoke with 180s timeout, `--workdir <project-root>`.
+     Output goes to `/tmp/wu-{ID}-vibe.md`.
+   - **Cursor candidate** — load `/cursor` for invocation syntax. Write prompt to
+     `/tmp/wu-{ID}-prompt.md`, invoke with 300s timeout, worktree `wu-{ID}-cursor`.
+     Output goes to `/tmp/wu-{ID}-cursor-output.md`.
 
    Launch both with `run_in_background: true`. Do NOT poll.
 
@@ -246,7 +222,7 @@ same-model N>1 (SWE-Master TTS, S* framework).
    ```
 5. If both fail verification, generate a **fresh attempt with a different
    approach** — do not iterate on either broken candidate. On retry, swap
-   models (e.g., Cursor with `gpt-5.4-high`, Vibe with `mistral-large-latest`).
+   models (e.g., Cursor with a different `--model`, Vibe with a different `--agent` config).
 
 **Exception**: Skip Best-of-2 for trivial units (<50 LOC, single file).
 Use Vibe-only (N=1) for these — it's the fastest generator.
@@ -310,24 +286,14 @@ cat > /tmp/wu-{ID}-prompt.md << 'PROMPT_EOF'
 PROMPT_EOF
 ```
 
-**Vibe generator** (fast, text output — code must be applied afterward):
-```bash
-VIBE=$(command -v vibe 2>/dev/null)
-test -x "$VIBE" || VIBE="$HOME/.local/bin/vibe"
-test -x "$VIBE" || VIBE="/usr/local/bin/vibe"
-$GTIMEOUT 180 "$VIBE" --headless --no-prompt --model codestral-latest \
-  generate -p "$(cat /tmp/wu-{ID}-prompt.md)" 2>/dev/null > /tmp/wu-{ID}-vibe-output.md
-```
+**Vibe generator** — load `/vibe` for exact invocation syntax. Key params:
+prompt file `/tmp/wu-{ID}-prompt.md`, 180s timeout, `--workdir <project-root>`,
+output to `/tmp/wu-{ID}-vibe-output.md`. Vibe outputs text, not file writes.
 
-**Cursor generator** (writes files directly via `--force`, worktree isolated):
-```bash
-AGENT=$(command -v agent 2>/dev/null)
-test -x "$AGENT" || AGENT="$HOME/.local/bin/agent"
-test -x "$AGENT" || AGENT="/usr/local/bin/agent"
-$GTIMEOUT 300 "$AGENT" -p --trust --force -w wu-{ID}-cursor \
-  --model sonnet-4.6-thinking --workspace <project-root> \
-  "$(cat /tmp/wu-{ID}-prompt.md)" 2>/dev/null > /tmp/wu-{ID}-cursor-output.md
-```
+**Cursor generator** — load `/cursor` for exact invocation syntax. Key params:
+prompt file `/tmp/wu-{ID}-prompt.md`, 300s timeout, worktree `wu-{ID}-cursor`,
+`--workspace <project-root>`, output to `/tmp/wu-{ID}-cursor-output.md`.
+Cursor writes files directly via `--force`.
 
 Use `run_in_background: true` for both Bash calls. Do NOT poll — wait for
 notification of completion.
@@ -360,14 +326,9 @@ If the primary generators are unavailable:
 | Cursor only | Codex `exec --sandbox workspace-write` as second generator |
 | Both | Codex Best-of-2 (original pattern) with Sonnet subagent fallback |
 
-Codex fallback invocation:
-```bash
-CODEX=$(ls ~/.nvm/versions/node/*/bin/codex 2>/dev/null | sort -V | tail -1)
-test -x "$CODEX" || CODEX="/opt/homebrew/bin/codex"
-$GTIMEOUT 180 "$CODEX" exec --ephemeral --skip-git-repo-check \
-  --sandbox workspace-write --cd <project-root> \
-  "$(cat /tmp/wu-{ID}-prompt.md)"
-```
+Codex fallback invocation — load `/codex` for invocation syntax. Key params:
+`--sandbox workspace-write`, `--ephemeral`, `--cd <project-root>`, 180s timeout.
+Prompt: `$(cat /tmp/wu-{ID}-prompt.md)`.
 
 Sonnet subagent fallback:
 1. Each subagent receives the same prompt built from `agents/worker.md`.
@@ -408,13 +369,11 @@ cat > /tmp/wu-{ID}-review-prompt.md << 'REVIEW_EOF'
 REVIEW_EOF
 ```
 
-**1. Codex (review+fix)** — the only reviewer that writes files:
-```bash
-$GTIMEOUT 180 "$CODEX" exec --ephemeral --skip-git-repo-check \
-  --sandbox workspace-write --cd <worktree-or-branch-path> \
-  "$(cat /tmp/wu-{ID}-codex-review-prompt.md)" 2>/dev/null \
-  > /tmp/wu-{ID}-review-codex.md
-```
+**1. Codex (review+fix)** — the only reviewer that writes files.
+Load `/codex` for invocation syntax. Key params: `--sandbox workspace-write`,
+`--ephemeral`, `--cd <worktree-or-branch-path>`, 180s timeout.
+Prompt: `$(cat /tmp/wu-{ID}-codex-review-prompt.md)`. Output to
+`/tmp/wu-{ID}-review-codex.md`.
 Uses the specialized prompt from `agents/codex-reviewer.md` which includes
 fix-application instructions.
 
@@ -423,28 +382,20 @@ fix-application instructions.
 Agent tool with prompt from agents/reviewer.md, model: sonnet
 ```
 
-**3. Cursor (read-only)** — freed from generation, now reviews:
-```bash
-$GTIMEOUT 120 "$AGENT" -p --trust --mode ask \
-  --model opus-4.6-thinking --workspace <worktree-or-branch-path> \
-  "$(cat /tmp/wu-{ID}-review-prompt.md)" 2>/dev/null \
-  > /tmp/wu-{ID}-review-cursor.md
-```
+**3. Cursor (read-only)** — freed from generation, now reviews.
+Load `/cursor` for invocation syntax. Key params: `--mode ask`,
+`--workspace <worktree-or-branch-path>`, 120s timeout.
+Prompt: `$(cat /tmp/wu-{ID}-review-prompt.md)`. Output to
+`/tmp/wu-{ID}-review-cursor.md`.
 
-**4. Copilot (read-only)**:
-```bash
-$GTIMEOUT 120 "$COPILOT" --allow-all-tools --no-ask-user --no-color \
-  --disable-builtin-mcps --add-dir <worktree-or-branch-path> -s \
-  -p "$(cat /tmp/wu-{ID}-review-prompt.md)" 2>/dev/null \
-  > /tmp/wu-{ID}-review-copilot.md
-```
+**4. Copilot (read-only)** — load `/copilot` for invocation syntax.
+Key params: `--add-dir <worktree-or-branch-path>`, 120s timeout.
+Prompt: `$(cat /tmp/wu-{ID}-review-prompt.md)`. Output to
+`/tmp/wu-{ID}-review-copilot.md`.
 
-**5. Gemini (best practices)**:
-```bash
-unset DEBUG
-$GTIMEOUT 120 "$GEMINI" -p "$(cat /tmp/wu-{ID}-review-prompt.md)" 2>/dev/null \
-  > /tmp/wu-{ID}-review-gemini.md
-```
+**5. Gemini (best practices)** — load `/gemini` for invocation syntax.
+Key params: 120s timeout. Prompt: `$(cat /tmp/wu-{ID}-review-prompt.md)`.
+Output to `/tmp/wu-{ID}-review-gemini.md`.
 Gemini fallback: if unavailable or times out, retry with Copilot (using a
 different `--model`). If both fail, proceed with 4 reviewers.
 
@@ -507,8 +458,8 @@ sound but has mechanical bugs):
 approach — the fundamental strategy is flawed):
 - Do NOT retry the same approach. This wastes tokens without progress.
 - Generate a **fresh attempt with a different approach** (new prompt angle).
-  Swap generator models (e.g., Cursor with `gpt-5.4-high`, Vibe with
-  `mistral-large-latest`).
+  Swap generator models (e.g., different `--model` for Cursor, different
+  `--agent` config for Vibe). See `/cursor` and `/vibe` for syntax.
 - If 2nd fresh attempt also fails: escalate to Opus review for feedback,
   then one more attempt with Opus feedback included.
 - 3rd failure on permanent errors: flag for human review. Move to `blocked`.
@@ -582,8 +533,8 @@ push or review is needed at this stage unless the user requests one.
 ### Timeout Guards
 
 - Set a mental time limit of 5 minutes per phase. If a phase has not produced output in 5 minutes, check if the subprocess is still running.
-- For Gemini CLI calls: always use `timeout 120` wrapper. If it times out, skip and note "Gemini timed out — skipping."
-- For Codex CLI calls: always use `timeout 120` wrapper. Same fallback.
+- For Gemini CLI calls: always use `$GTIMEOUT` with skill-appropriate values (120s for read-only analysis, 180s for larger prompts). If it times out, skip and note "Gemini timed out — skipping."
+- For Codex CLI calls: always use `$GTIMEOUT` with skill-appropriate values (120s for read-only review, 180s for generation or large prompts). Same fallback.
 - If a subagent has been running for more than 10 minutes with no output, consider it stalled and move on.
 - Report any timeouts in the completion summary so the user knows what was skipped.
 

@@ -21,9 +21,11 @@ or Homebrew depending on system state:
 CODEX=$(ls ~/.nvm/versions/node/*/bin/codex 2>/dev/null | sort -V | tail -1)
 test -x "$CODEX" || CODEX="/opt/homebrew/bin/codex"
 test -x "$CODEX" || { echo "Codex unavailable — skipping"; }
+export PATH="$(dirname "$CODEX"):$PATH"
 ```
 
-Use `"$CODEX"` in every invocation. Do not use bare `codex`.
+Use `"$CODEX"` in every invocation. Do not use bare `codex`. The PATH export
+is required for NVM installs because the `codex` wrapper uses `/usr/bin/env node`.
 
 ## Timeout Binary
 
@@ -150,7 +152,11 @@ When Codex needs to write files in headless mode, prefer an explicit sandbox
 mode over `--full-auto` so the write policy is obvious:
 
 ```bash
-$GTIMEOUT 120 "$CODEX" exec --ephemeral --skip-git-repo-check --sandbox workspace-write -C /path/to/project "Add input validation to all API route handlers" 2>/dev/null
+$GTIMEOUT 180 "$CODEX" exec --ephemeral --skip-git-repo-check \
+  -c 'mcp_servers.homelab-gateway.enabled=false' \
+  -c 'mcp_servers.ssh-tower.enabled=false' \
+  -c 'mcp_servers.github.enabled=false' \
+  --sandbox workspace-write -C /path/to/project "Add input validation to all API route handlers" 2>/dev/null
 ```
 
 ### Structured Output
@@ -188,8 +194,9 @@ $GTIMEOUT 120 "$CODEX" exec --ephemeral --skip-git-repo-check -C /path/to/projec
 ## Critical Gotchas
 
 1. **Always wrap with `$GTIMEOUT`** — the CLI hangs indefinitely on credit
-   exhaustion or network issues. 120s for reviews, 60s for generation, 30s
-   for lint checks.
+   exhaustion or network issues. Use 120s for reviews, 180s for generation,
+   and 300s for unusually large multi-file prompts. Reserve 30s only for
+   tiny lint-style checks.
 
 2. **`-p` is `--profile`, NOT prompt** — the prompt is a **positional argument**
    (last arg after all flags). Using `-p "some text"` causes
@@ -265,7 +272,7 @@ templates. For full network access, use `--sandbox danger-full-access`.
 | Failure Mode | Action |
 |---|---|
 | CLI not installed | Skip, note "Codex unavailable" |
-| Timeout (exit 130) | Retry once with 180s; then skip |
+| Timeout (exit 124) | Retry once with 180s; then skip |
 | Credit exhaustion (hang) | Timeout catches it; skip |
 | All 5 slots occupied | Queue and retry after 30s; skip after 3 attempts |
 | MCP server hang | Timeout catches it; consider checking config |

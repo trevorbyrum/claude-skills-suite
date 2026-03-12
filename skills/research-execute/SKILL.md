@@ -158,39 +158,31 @@ note the shortfall in the synthesis and flag thin connectors.
    db_upsert 'research-execute' 'counter' '{NNN}/sonnet' "$COUNTER_CONTENT"
    ```
 
-   **Counter 2 — Gemini CLI:**
+   **Counter 2 — Gemini CLI:** Load `/gemini` for invocation syntax.
+   Key params: `--agent generalist`, 120s timeout.
+   Prompt: `"Read this research synthesis and challenge it. Identify weak
+   evidence, missing angles, and overclaimed conclusions. Be adversarial.
+   $(cat artifacts/research/summary/{NNN}-{topic-slug}.md)"`.
+   Output to `/tmp/counter-gemini.md`. Then store in DB:
    ```bash
-   unset DEBUG 2>/dev/null
-   GTIMEOUT="/opt/homebrew/bin/gtimeout"; GEMINI="/Users/trevorbyrum/.npm-global/bin/gemini"
-   test -x "$GEMINI" || GEMINI="/opt/homebrew/bin/gemini"
-   $GTIMEOUT 120 "$GEMINI" --agent generalist -p "Read this research synthesis and challenge it. Identify weak \
-   evidence, missing angles, and overclaimed conclusions. Be adversarial. \
-   $(cat artifacts/research/summary/{NNN}-{topic-slug}.md)" 2>/dev/null \
-   > /tmp/counter-gemini.md
    source artifacts/db.sh && db_upsert 'research-execute' 'counter' '{NNN}/gemini' "$(cat /tmp/counter-gemini.md)" && rm /tmp/counter-gemini.md
    ```
 
-   **Counter 3 — Codex CLI:**
+   **Counter 3 — Codex CLI:** Load `/codex` for invocation syntax.
+   Key params: `--sandbox read-only`, `--ephemeral`, 180s timeout.
+   Prompt: `"Review this research synthesis for technical accuracy. Flag any
+   claims about libraries, frameworks, or APIs that are outdated or incorrect.
+   $(cat artifacts/research/summary/{NNN}-{topic-slug}.md)"`.
+   Output to `/tmp/counter-codex.md`. Then store in DB:
    ```bash
-   CODEX=$(ls ~/.nvm/versions/node/*/bin/codex 2>/dev/null | sort -V | tail -1); test -x "$CODEX" || CODEX="/opt/homebrew/bin/codex"
-   GTIMEOUT="/opt/homebrew/bin/gtimeout"; test -x "$GTIMEOUT" || GTIMEOUT="/opt/homebrew/bin/timeout"
-   $GTIMEOUT 120 "$CODEX" exec --ephemeral --sandbox read-only --skip-git-repo-check \
-   "Review this research synthesis for technical accuracy. Flag \
-   any claims about libraries, frameworks, or APIs that are outdated or \
-   incorrect. $(cat artifacts/research/summary/{NNN}-{topic-slug}.md)" \
-   2>/dev/null > /tmp/counter-codex.md
    source artifacts/db.sh && db_upsert 'research-execute' 'counter' '{NNN}/codex' "$(cat /tmp/counter-codex.md)" && rm /tmp/counter-codex.md
    ```
 
    Launch all three in parallel. If Gemini fails (unavailable, timeout, or
-   empty output), retry with Copilot as a fallback:
+   empty output), retry with Copilot as a fallback — load `/copilot` for
+   invocation syntax. Same prompt, 120s timeout. Output to
+   `/tmp/counter-copilot.md`. Then store in DB:
    ```bash
-   COPILOT="/opt/homebrew/bin/copilot"
-   $GTIMEOUT 120 "$COPILOT" --allow-all-tools --no-ask-user --no-color --disable-builtin-mcps -s \
-   -p "Read this research synthesis and challenge it. Identify weak \
-   evidence, missing angles, and overclaimed conclusions. Be adversarial. \
-   $(cat artifacts/research/summary/{NNN}-{topic-slug}.md)" 2>/dev/null \
-   > /tmp/counter-copilot.md
    source artifacts/db.sh && db_upsert 'research-execute' 'counter' '{NNN}/copilot' "$(cat /tmp/counter-copilot.md)" && rm /tmp/counter-copilot.md
    ```
    Store Copilot counters under label `copilot` — they count equivalently to

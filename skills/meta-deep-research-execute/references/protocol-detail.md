@@ -83,6 +83,7 @@ artifact DB per connector (written by the research-connector agent).
 ```bash
 CODEX=$(ls ~/.nvm/versions/node/*/bin/codex 2>/dev/null | sort -V | tail -1)
 test -x "$CODEX" || CODEX="/opt/homebrew/bin/codex"
+export PATH="$(dirname "$CODEX"):$PATH"
 GTIMEOUT="/opt/homebrew/bin/gtimeout"; test -x "$GTIMEOUT" || GTIMEOUT="/opt/homebrew/bin/timeout"
 test -x "$CODEX" || { echo "Codex unavailable — reassigning to Sonnet"; }
 ```

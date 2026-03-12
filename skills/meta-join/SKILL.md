@@ -186,8 +186,8 @@ Start from wherever the project currently is — not from zero.
 ### Timeout Guards
 
 - Set a mental time limit of 5 minutes per phase. If a phase has not produced output in 5 minutes, check if the subprocess is still running.
-- For Gemini CLI calls: always use `timeout 120` wrapper. If it times out, skip and note "Gemini timed out — skipping."
-- For Codex CLI calls: always use `timeout 120` wrapper. Same fallback.
+- For Gemini CLI calls: always use `$GTIMEOUT` with skill-appropriate values (120s for read-only analysis, 180s for larger prompts). If it times out, skip and note "Gemini timed out — skipping."
+- For Codex CLI calls: always use `$GTIMEOUT` with skill-appropriate values (120s for read-only review, 180s for generation or large prompts). Same fallback.
 - If a subagent has been running for more than 10 minutes with no output, consider it stalled and move on.
 - Report any timeouts in the completion summary so the user knows what was skipped.
 

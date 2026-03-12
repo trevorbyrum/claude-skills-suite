@@ -1,6 +1,6 @@
 ---
 name: meta-review
-description: Comprehensive multi-model project review across 8 lenses and 3 model families in parallel. Use for full project review, pre-deploy audit, or milestone quality gate. Not for single-lens reviews.
+description: Comprehensive multi-model project review across 7 lenses and 3 model families in parallel. Use for full project review, pre-deploy audit, or milestone quality gate. Not for single-lens reviews.
 ---
 
 # meta-review
@@ -61,21 +61,12 @@ Total: SAST pre-scan + **12 LLM reviews** (7 Sonnet + 3 Codex + 2 Gemini), then 
 
 2. Create the `artifacts/reviews/` directory if it does not exist.
 
-3. Check CLI availability for multi-model execution:
-   ```bash
-   CODEX=$(ls ~/.nvm/versions/node/*/bin/codex 2>/dev/null | sort -V | tail -1)
-   test -x "$CODEX" || CODEX="/opt/homebrew/bin/codex"
-   GTIMEOUT="/opt/homebrew/bin/gtimeout"; test -x "$GTIMEOUT" || GTIMEOUT="/opt/homebrew/bin/timeout"
-   COPILOT="/opt/homebrew/bin/copilot"
-   GEMINI="/Users/trevorbyrum/.npm-global/bin/gemini"
-   test -x "$GEMINI" || GEMINI="/opt/homebrew/bin/gemini"
-   test -x "$CODEX" && echo "codex: available" || echo "codex: unavailable"
-   test -x "$GEMINI" && echo "gemini: available" || echo "gemini: unavailable"
-   test -x "$COPILOT" && echo "copilot: available" || echo "copilot: unavailable"
-   ```
-   Note which models are available. Copilot is Gemini's fallback — if Gemini
-   is unavailable or fails, retry with Copilot before skipping. Unavailable
-   models are skipped — synthesis adjusts confidence scoring accordingly.
+3. Check CLI availability for multi-model execution. Load `/codex`, `/gemini`,
+   and `/copilot` for path resolution — each driver skill has the canonical
+   discovery pattern. Note which models are available. Copilot is Gemini's
+   fallback — if Gemini is unavailable or fails, retry with Copilot before
+   skipping. Unavailable models are skipped — synthesis adjusts confidence
+   scoring accordingly.
 
 4. Identify the ~10 most important source files for Gemini context. These
    are typically: entry point, main config, core business logic files, auth
@@ -97,25 +88,54 @@ mcp__semgrep__scan_directory(path: "<project-root>")
 ```
 Store the result. If the tool is unavailable, skip and note in synthesis.
 
-#### Step 2: SonarQube MCP query
+#### Step 2: SonarQube scan + query
 
-Check if the project has a SonarQube project key:
+Derive the project key from the root folder name (lowercase, e.g.,
+`/Users/foo/Projects/Arbytr` → `arbytr`).
+
+**2a. Check if project exists:**
 ```
-mcp__sonarqube__search_my_sonarqube_projects(q: "<project-name>")
+mcp__sonarqube__search_my_sonarqube_projects(q: "<project-key>")
 ```
 
-If a project exists, pull HIGH/BLOCKER issues and security hotspots:
+**2b. If no project exists, create and scan:**
+```bash
+# Create project via SonarQube API
+curl -s -u "$SONARQUBE_TOKEN:" "http://100.127.173.50:9000/api/projects/create" \
+  -d "name=<ProjectName>&project=<project-key>"
+
+# Run sonar-scanner (JDK 21 required)
+export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
+export PATH="$JAVA_HOME/bin:$PATH"
+npx --yes sonar-scanner \
+  -Dsonar.projectKey=<project-key> \
+  -Dsonar.projectName=<ProjectName> \
+  -Dsonar.sources=. \
+  -Dsonar.exclusions="**/node_modules/**,**/dist/**,**/compact/**,**/artifacts/**,**/research/**" \
+  -Dsonar.host.url=http://100.127.173.50:9000 \
+  -Dsonar.token="$SONARQUBE_TOKEN" 2>&1
+```
+
+The token is stored in Vault at `services/sonarqube`. Read it via:
+```bash
+SONARQUBE_TOKEN=$(vault kv get -field=token services/sonarqube 2>/dev/null)
+```
+If Vault is unavailable, check env var `SONARQUBE_TOKEN`. If neither exists,
+skip SonarQube entirely.
+
+The scan takes ~60s. If JDK is not installed (`java --version` fails), skip.
+
+**2c. Query results** (whether project was pre-existing or just created):
 ```
 mcp__sonarqube__search_sonar_issues_in_projects(
-  projects: ["<projectKey>"],
+  projects: ["<project-key>"],
   severities: ["HIGH", "BLOCKER"],
   issueStatuses: ["OPEN"]
 )
-mcp__sonarqube__search_security_hotspots(projectKey: "<projectKey>")
+mcp__sonarqube__search_security_hotspots(projectKey: "<project-key>")
 ```
 
-If no SonarQube project exists, skip. Do NOT create one or run sonar-scanner
-here — that's a separate setup step the user does ahead of time.
+If SonarQube is unreachable or all steps fail, skip and note in synthesis.
 
 #### Step 3: Local SAST CLIs
 
@@ -221,15 +241,15 @@ Launch exactly **3** Codex processes for: `security-review`, `refactor-review`,
 Each Codex exec:
 1. Receives a review prompt assembled from the atomic skill's instructions
    AND the `$SAST_SUMMARY` from Phase 1.5
-2. Runs with `--sandbox read-only --ephemeral` and relevant source directories
-   via `--add-dir`
+2. Runs read-only with relevant source directories added
 3. Pipes output to a temp file, then stores in DB:
    ```bash
-   $GTIMEOUT 120 "$CODEX" exec --ephemeral --sandbox read-only --skip-git-repo-check \
-     -C <project-root> --add-dir <relevant-dir-1> --add-dir <relevant-dir-2> \
-     -o /tmp/lens-codex-{lens}.md "LENS_PROMPT" 2>/dev/null
    source artifacts/db.sh && db_upsert '{lens}' 'findings' 'codex' "$(cat /tmp/lens-codex-{lens}.md)" && rm /tmp/lens-codex-{lens}.md
    ```
+
+   Load `/codex` for invocation syntax. Key params: `--sandbox read-only`,
+   `--ephemeral`, `--cd <project-root>`, `--add-dir <relevant-dir>`, 120s timeout.
+   Prompt: `LENS_PROMPT`. Output to `/tmp/lens-codex-{lens}.md`.
 
 If Codex is unavailable, skip all Codex reviews and note it in synthesis.
 
@@ -245,23 +265,25 @@ Each Gemini invocation:
    the `$SAST_SUMMARY` from Phase 1.5, plus relevant code context via
    `@path/to/file` references (use the file list from Phase 1, max ~10 files)
 2. Uses `codebase_investigator` sub-agent
-3. Runs with `--agent codebase_investigator`, `$GTIMEOUT 60`, and `2>/dev/null`
-4. Pipes output to a temp file, then stores in DB as label `gemini`:
+3. Pipes output to a temp file, then stores in DB as label `gemini`:
    ```bash
-   $GTIMEOUT 60 "$GEMINI" ... 2>/dev/null > /tmp/lens-gemini-{lens}.md
    source artifacts/db.sh && db_upsert '{lens}' 'findings' 'gemini' "$(cat /tmp/lens-gemini-{lens}.md)" && rm /tmp/lens-gemini-{lens}.md
    ```
 
+   Load `/gemini` for invocation syntax. Key params: `--agent codebase_investigator`,
+   60s timeout. Prompt: `LENS_PROMPT` with `@file` references. Output to
+   `/tmp/lens-gemini-{lens}.md`.
+
 If Gemini is unavailable or fails (timeout, empty output), **retry each
 failed lens with Copilot** using the `/copilot` skill. Use the same prompt
-and context, but adapt invocation syntax:
+and context. Store as label `copilot`:
 ```bash
-$GTIMEOUT 60 "$COPILOT" --allow-all-tools --no-ask-user --no-color --disable-builtin-mcps --add-dir <project-root> -s \
-  -p "LENS_PROMPT" 2>/dev/null > /tmp/lens-copilot-{lens}.md
 source artifacts/db.sh && db_upsert '{lens}' 'findings' 'copilot' "$(cat /tmp/lens-copilot-{lens}.md)" && rm /tmp/lens-copilot-{lens}.md
 ```
-Store as label `copilot` — it counts the same as `gemini` for confidence
-scoring. If both Gemini and Copilot fail, skip and note it in synthesis.
+Load `/copilot` for invocation syntax. Key params: `--add-dir <project-root>`,
+60s timeout. Prompt: `LENS_PROMPT`. Output to `/tmp/lens-copilot-{lens}.md`.
+`copilot` label counts the same as `gemini` for confidence scoring.
+If both Gemini and Copilot fail, skip and note it in synthesis.
 
 **Steps 2a, 2b, and 2c can all launch simultaneously** — there is no
 queuing needed since counts are within limits (7 Sonnet, 3 Codex, 2 Gemini/Copilot).

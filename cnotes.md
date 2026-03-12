@@ -6,6 +6,84 @@
 ## Notes (Newest First)
 
 ---CLAUDE--------------------
+note_id: CN-20260312-203000-CLAUDE
+timestamp_utc: 2026-03-12T20:30:00Z
+author: CLAUDE
+activity_type: CODE_WRITE
+work_scope: New skill-forge skill — unified create/edit for skill suite
+files_touched: skills/skill-forge/SKILL.md, skills/skill-forge/references/skill-template.md, skills/skill-forge/references/validation-checklist.md
+summary: |
+  Built /skill-forge — single skill that handles both creating new skills and editing existing ones.
+  Auto-detects mode based on whether skills/<name>/SKILL.md exists.
+  Two reference files encode all suite patterns and lessons learned:
+  - skill-template.md: canonical SKILL.md structure (frontmatter rules, section order, progressive disclosure architecture, output patterns A/B/C, sizing guidelines)
+  - validation-checklist.md: 40+ checks across 8 categories (frontmatter, structure, content, anti-patterns, DB integration, driver boundary, progressive disclosure, infrastructure)
+  Anti-pattern checks encode every production bug we've hit: always-on descriptions, subagent DB writes, stale file refs, bare timeout, line-count validation, context stuffing.
+  Self-validated: PASS (0 failures, 0 warnings). Description at 146 chars.
+decisions:
+  - Single skill (skill-forge) instead of separate skill-create + skill-edit — mode detection is trivial
+  - Validation checklist uses FAIL/WARN severity — FAILs must be fixed before finishing
+  - User confirms plan before writing (Phase 2 gate) — follows general.md approach-selection rule
+handoff_to: CLAUDE
+next_actions: Consider adding skill-forge to meta-init scaffold chain; update todo/features if needed
+------------------------------
+
+---CLAUDE--------------------
+note_id: CN-20260312-193000-CLAUDE
+timestamp_utc: 2026-03-12T19:30:00Z
+author: CLAUDE
+activity_type: CODE_WRITE
+work_scope: Counter-review upgrade — adversarial red-team capabilities
+files_touched: skills/counter-review/SKILL.md, skills/counter-review/references/abuse-cases.md, skills/counter-review/references/attack-chains.md, skills/counter-review/references/what-if-scenarios.md
+summary: |
+  Upgraded counter-review from 4 attack vectors to 7. Added 3 adversarial sections + 3 progressive-disclosure reference files.
+  New sections: §6 Adversarial Abuse Cases (business logic, input boundaries, state manipulation, agentic abuse), §7 Attack Chain Construction (trust boundary mapping, escalation paths, chain severity scoring), §8 "What If" Scenarios (infrastructure failure, security breach, scale, operational).
+  Added boundary table vs security-review — counter-review owns creative adversarial thinking, security-review owns checklist/pattern compliance.
+  Finding template extended with Attack Chain format (entry point, path, prerequisites, likelihood) and Scenario format (assumption challenged, current behavior, verdict).
+  3 reference files follow security-review's progressive disclosure pattern.
+decisions:
+  - Counter-review absorbs red-team functionality (no separate red-team skill)
+  - Clear boundary: security-review = known patterns/checklists, counter-review = creative adversarial thinking
+  - Attack chains are counter-review's unique capability — chaining findings across lenses
+handoff_to: CLAUDE
+next_actions: Update description (currently >150 chars — needs trim per todo #1)
+------------------------------
+
+---CLAUDE--------------------
+note_id: CN-20260312-190000-CLAUDE
+timestamp_utc: 2026-03-12T19:00:00Z
+author: CLAUDE
+activity_type: BUG_FIX
+work_scope: Fix stale "output file" references in 5 review lens skills + meta-review description
+files_touched: skills/counter-review/SKILL.md, skills/completeness-review/SKILL.md, skills/refactor-review/SKILL.md, skills/compliance-review/SKILL.md, skills/drift-review/SKILL.md, skills/meta-review/SKILL.md
+summary: |
+  1. Fixed 5 lens skills that still said "Write findings to the output file" despite Outputs section correctly using db_upsert. Changed to "Format each finding using this structure (store via db_upsert as shown in Outputs above)". security-review and test-review were already clean.
+  2. Fixed meta-review description: "8 lenses" → "7 lenses". The 8th was never wired in.
+  3. Discovered skills/ui-design/ — directory scaffolded (Mar 11 23:16) but SKILL.md never written. Empty references/ dir only. Not wired into meta-review or meta-research.
+decisions:
+  - Only review-synthesis.md stays on disk as a file. All lens findings go to artifact DB only.
+risks_or_gaps: ui-design skill needs to be written and wired into meta-review as 8th lens (user confirmed this was intended)
+handoff_to: CLAUDE
+next_actions: Write ui-design SKILL.md, wire as 8th lens in meta-review
+------------------------------
+
+---CLAUDE--------------------
+note_id: CN-20260312-150000-CLAUDE
+timestamp_utc: 2026-03-12T15:00:00Z
+author: CLAUDE
+activity_type: CODE_WRITE
+work_scope: Vibe skill overhaul, context estimation removal, github-pull skill, CLI dedup rule
+files_touched: skills/vibe/SKILL.md, skills/meta-execute/SKILL.md, rules/general.md, hooks/stop-check.sh, skills/meta-context-save/SKILL.md, skills/project-scaffold/templates/claude-md-template.md, skills/github-pull/SKILL.md
+summary: |
+  1. Removed context window estimation from stop hook, meta-context-save, and claude-md-template. Context save is now manual-only via /meta-context-save.
+  2. Created /github-pull skill (git fetch --prune + git pull --ff-only, --rebase/--stash options).
+  3. Full rewrite of /vibe skill — old syntax was 100% wrong (--headless, --no-prompt, generate/review subcommands don't exist). Correct: `-p "PROMPT" --output text --max-turns N`. Verified against --help, live testing, official Mistral docs.
+  4. Removed duplicated CLI syntax from meta-execute and general.md — driver skills are now single source of truth. Saved feedback memory for this rule.
+decisions:
+  - Driver skills (/vibe, /codex, /gemini, /copilot, /cursor) are the ONLY place CLI syntax lives. Consuming skills say "load /vibe for syntax" instead of inlining commands.
+  - 9 other consuming skills still have duplicated CLI syntax — needs future sweep.
+
+---CLAUDE--------------------
 note_id: CN-20260313-120000-CLAUDE
 timestamp_utc: 2026-03-13T12:00:00Z
 author: CLAUDE
@@ -23,8 +101,11 @@ details:
   - Architecture diagram updated to show pre-scan flow
   - Graceful degradation: if ALL tools unavailable, LLM reviews still run
   - SonarQube query only runs if project already exists — does NOT create projects or run sonar-scanner
+  - Updated Step 2: SonarQube now auto-creates project + runs sonar-scanner if no project exists (derives key from folder name)
+  - Requires JDK 21 (already installed via Homebrew), token from Vault services/sonarqube or $SONARQUBE_TOKEN env var
+  - Graceful skip if JDK missing or SonarQube unreachable
 validation: structural review of SKILL.md edits — needs real /meta-review run to validate end-to-end
-risks_or_gaps: Not tested on a real project yet; SAST summary truncation at 5000 chars may lose findings on large codebases
+risks_or_gaps: Not tested on a real project yet; SAST summary truncation at 5000 chars may lose findings on large codebases; sonar-scanner adds ~60s to Phase 1.5
 handoff_to: CLAUDE
 next_actions: Run /meta-review on Arbytr to validate Phase 1.5 end-to-end
 ------------------------------

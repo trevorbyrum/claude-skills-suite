@@ -94,38 +94,20 @@ Before scanning code, research production best practices specific to this
 project's tech stack. Read `project-context.md` to identify the stack and
 determine the service criticality tier.
 
-```bash
-GTIMEOUT="/opt/homebrew/bin/gtimeout"
-GEMINI="/Users/trevorbyrum/.npm-global/bin/gemini"
-test -x "$GEMINI" || GEMINI="/opt/homebrew/bin/gemini"
-test -x "$GEMINI" || { echo "Gemini unavailable — trying Copilot"; }
-COPILOT="/opt/homebrew/bin/copilot"
-```
-
-If Gemini is available, run:
-
-```bash
-unset DEBUG 2>/dev/null
-$GTIMEOUT 120 "$GEMINI" -p \
-  "Research production readiness best practices for a [STACK] application.
-   Cover: deployment patterns (blue/green, canary, progressive delivery),
-   observability (SLI-based alerting, OpenTelemetry, cost-aware),
-   security hardening (supply chain, runtime security, network policies),
-   SLO/SLI definition, chaos engineering readiness, capacity planning,
-   incident response maturity, and common production antipatterns.
-   Be specific to this stack — not generic advice.
-   Project context: [first 3 sections of project-context.md]" \
-  2>/dev/null > /tmp/prr-stack-research.md
-```
-
+Load `/gemini` for invocation syntax. Key params: 120s timeout, prompt:
+`"Research production readiness best practices for a [STACK] application.
+Cover: deployment patterns (blue/green, canary, progressive delivery),
+observability (SLI-based alerting, OpenTelemetry, cost-aware),
+security hardening (supply chain, runtime security, network policies),
+SLO/SLI definition, chaos engineering readiness, capacity planning,
+incident response maturity, and common production antipatterns.
+Be specific to this stack — not generic advice.
+Project context: [first 3 sections of project-context.md]"`.
 Replace `[STACK]` with the actual tech stack from project-context.md.
+Output to `/tmp/prr-stack-research.md`.
 
-If Gemini is unavailable or fails, retry with Copilot:
-```bash
-$GTIMEOUT 120 "$COPILOT" --allow-all-tools --no-ask-user --no-color --disable-builtin-mcps -s \
-  -p "Research production readiness best practices for a [STACK] application. [same prompt as above]" \
-  2>/dev/null > /tmp/prr-stack-research.md
-```
+If Gemini is unavailable or fails, retry with Copilot — load `/copilot`
+for invocation syntax. Same prompt, same output file.
 If both Gemini and Copilot fail, use Claude WebSearch. Stack research is NOT
 optional — the production-specific checks in Phase 2 use these findings.
 
@@ -164,34 +146,19 @@ Each review-lens subagent stores its output in DB as `db_upsert '{lens}' 'findin
 Fan out 5 Codex instances — one per production dimension (Dims 8-12).
 Uses all 5 available Codex slots.
 
-```bash
-CODEX=$(ls ~/.nvm/versions/node/*/bin/codex 2>/dev/null | sort -V | tail -1)
-test -x "$CODEX" || CODEX="/opt/homebrew/bin/codex"
-test -x "$CODEX" || { echo "Codex unavailable — falling back to Sonnet"; }
-```
+Load `/codex` for invocation syntax. Key params for all 5 workers:
+`--sandbox read-only`, `--ephemeral`, `--cd /path/to/project`, 120s timeout.
 
 Read `references/production-scan-prompts.md` for prompts for Dims 8-10.
 Read `references/reliability-capacity-prompts.md` for prompts for Dims 11-12.
 
-Launch all 5 in parallel:
+Launch all 5 in parallel. Output each to `/tmp/prr-{dimension}.md`.
 
 **Workers 1-3** — Observability (8), Deployment (9), Operations (10):
-
-```bash
-$GTIMEOUT 120 "$CODEX" exec --ephemeral --sandbox read-only --skip-git-repo-check \
-  --cd /path/to/project \
-  "[prompt from references/production-scan-prompts.md]" \
-  2>/dev/null > /tmp/prr-{dimension}.md &
-```
+prompt from `references/production-scan-prompts.md`.
 
 **Workers 4-5** — Reliability (11), Capacity (12):
-
-```bash
-$GTIMEOUT 120 "$CODEX" exec --ephemeral --sandbox read-only --skip-git-repo-check \
-  --cd /path/to/project \
-  "[prompt from references/reliability-capacity-prompts.md]" \
-  2>/dev/null > /tmp/prr-{dimension}.md &
-```
+prompt from `references/reliability-capacity-prompts.md`.
 
 Wait for all 5 and store in DB:
 
@@ -212,26 +179,21 @@ Less depth but still covers the patterns via grep and file analysis.
 While Track A and B run, have Gemini cross-reference the stack research
 (Phase 1) against the project's actual implementation:
 
+Load `/gemini` for invocation syntax. Key params: 120s timeout, prompt:
+`"Compare these production best practices against the actual codebase.
+For each practice, mark it as: IMPLEMENTED, PARTIALLY IMPLEMENTED, or MISSING.
+Cite specific files and lines.
+Best practices: $(cat /tmp/prr-stack-research.md)
+Focus on the top 20 most critical practices for this stack."`.
+Output to `/tmp/prr-practices.md`. Then store in DB:
 ```bash
-unset DEBUG 2>/dev/null
-$GTIMEOUT 120 "$GEMINI" -p \
-  "Compare these production best practices against the actual codebase.
-   For each practice, mark it as: IMPLEMENTED, PARTIALLY IMPLEMENTED,
-   or MISSING. Cite specific files and lines.
-   Best practices: $(cat /tmp/prr-stack-research.md)
-   Focus on the top 20 most critical practices for this stack." \
-  2>/dev/null > /tmp/prr-practices.md
 source artifacts/db.sh
 db_upsert 'meta-production' 'scan' 'practices-audit' "$(cat /tmp/prr-practices.md)"
 rm /tmp/prr-practices.md
 ```
 
-If Gemini is unavailable or fails, retry Track C with Copilot:
-```bash
-$GTIMEOUT 120 "$COPILOT" --allow-all-tools --no-ask-user --no-color --disable-builtin-mcps -s \
-  -p "Compare these production best practices against the actual codebase. [same prompt as above]" \
-  2>/dev/null > /tmp/prr-practices.md
-```
+If Gemini is unavailable or fails, retry Track C with Copilot — load `/copilot`
+for invocation syntax. Same prompt, same output file and DB storage step.
 If both Gemini and Copilot fail, skip this track. It enriches the report but
 isn't required for scoring.
 

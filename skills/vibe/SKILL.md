@@ -34,82 +34,178 @@ test -x "$GTIMEOUT" || { echo "gtimeout not installed (brew install coreutils)";
 
 Every template below uses `$GTIMEOUT`. Do not use bare `timeout`.
 
-## Headless Mode (MANDATORY)
+## Programmatic Mode (MANDATORY)
 
-**Without `--headless --no-prompt`, Vibe CLI enters interactive mode and hangs indefinitely**
-in subshells. These flags are required for ALL automated invocations.
+**Without `-p` / `--prompt`, Vibe enters interactive TUI mode and hangs indefinitely**
+in subshells. The `-p` flag is required for ALL automated invocations.
+
+`-p` auto-approves all tool executions by default — no separate `--auto-approve` needed.
 
 ```bash
-# Minimum viable headless invocation
-$GTIMEOUT 120 "$VIBE" --headless --no-prompt generate -p "PROMPT" 2>/dev/null
+# Minimum viable programmatic invocation
+$GTIMEOUT 120 "$VIBE" -p "PROMPT" --output text --max-turns 5 2>/dev/null
 ```
+
+**Do NOT use positional prompts** (e.g., `vibe "prompt"`) — those launch the interactive TUI.
+
+## Prompt Scoping (MANDATORY)
+
+Vibe performs best when the prompt is **narrow, concrete, and file/work-unit scoped**.
+Do not ask it to "look around the repo", "analyze the whole project", or
+"figure out what to change." That pattern burns turns on exploration and often
+ends with no final answer.
+
+**Always give Vibe all 4 of these:**
+
+1. **Target** — exact file(s), directory, or work unit ID
+2. **Task** — what to implement/review/summarize
+3. **Output shape** — patch, code block, bullets, test, etc.
+4. **Success criteria** — what "done" means for this prompt
+
+**Good prompt shape:**
+
+```text
+Read [specific file(s)].
+Implement [specific change].
+Return [specific output format].
+Stay within [named files / single work unit].
+Do not inspect unrelated parts of the project.
+```
+
+**Good examples:**
+
+- `Read src/auth.ts and src/session.ts. Implement refresh-token rotation for WU-3. Return complete replacement code blocks for those files only. Do not inspect unrelated directories.`
+- `Read rules/general.md and references/cross-cutting-rules.md. Summarize the driver-skill boundary in 5 bullets. Do not scan the rest of the repo.`
+
+**Bad examples:**
+
+- `Analyze the architecture of this project`
+- `Look through the repo and figure out what needs to change`
+- `Implement this feature however you think is best`
+
+## CLI Flags Reference (v2.4.2)
+
+| Flag | Argument | Purpose |
+|---|---|---|
+| `-p` / `--prompt` | `TEXT` | Programmatic mode: send prompt, auto-approve tools, output, exit |
+| `--output` | `text\|json\|streaming` | Output format (default: `text`) |
+| `--max-turns` | `N` | Limit assistant turns (programmatic mode only) |
+| `--max-price` | `DOLLARS` | Cost cap — interrupts if exceeded |
+| `--enabled-tools` | `TOOL` | Restrict to specific tools; disables all others. Supports glob (`bash*`) and regex (`re:^pattern$`). Can repeat. |
+| `--agent` | `NAME` | Agent profile: `default`, `plan`, `accept-edits`, `auto-approve`, or custom |
+| `--workdir` | `DIR` | Set working directory |
+| `-c` / `--continue` | — | Resume most recent session |
+| `--resume` | `SESSION_ID` | Resume specific session (partial ID match) |
+| `--setup` | — | Configure API key |
+| `-v` / `--version` | — | Show version |
+
+**Flags that do NOT exist** (despite appearing in some docs for other versions):
+`--headless`, `--no-prompt`, `--model`, `--auto-approve`, `generate`, `review` subcommands.
 
 ## Task-Type Templates
 
 ### Code Generation (Primary Use Case)
 
 ```bash
-# Fast generation with Codestral (default for code tasks)
+# Fast generation with devstral-2 (default model)
+# Prompt should name the exact work unit and target files.
 $GTIMEOUT 180 "$VIBE" \
-  --headless \
-  --no-prompt \
-  --model codestral-latest \
-  generate -p "$(cat /tmp/prompt.md)" 2>/dev/null > /tmp/vibe-generated.ts
-
-# Alternative models
-$GTIMEOUT 180 "$VIBE" \
-  --headless \
-  --no-prompt \
-  --model mistral-large-latest \
-  generate -p "Write comprehensive documentation for this function" 2>/dev/null > /tmp/vibe-docs.md
+  -p "$(cat /tmp/prompt.md)" \
+  --output text \
+  --max-turns 10 \
+  --workdir /path/to/project \
+  2>/dev/null > /tmp/vibe-generated.ts
 ```
 
 ### Code Review
 
 ```bash
-# Review single file
+# Review a file — reference the exact file and review focus in the prompt
 $GTIMEOUT 120 "$VIBE" \
-  --headless \
-  --no-prompt \
-  --model codestral-latest \
-  review -f "src/complex-module.ts" \
-  -p "Analyze for security issues, performance bottlenecks, and code smells" 2>/dev/null > /tmp/vibe-review.md
-
-# Review with specific focus
-$GTIMEOUT 120 "$VIBE" \
-  --headless \
-  --no-prompt \
-  --model mistral-large-latest \
-  review -f "src/api-handler.ts" \
-  -p "Focus on error handling and edge cases" 2>/dev/null > /tmp/vibe-error-review.md
+  -p "Read src/complex-module.ts and analyze for security issues, performance bottlenecks, and code smells" \
+  --output text \
+  --max-turns 5 \
+  --workdir /path/to/project \
+  2>/dev/null > /tmp/vibe-review.md
 ```
 
-### File Context (@-syntax)
+### Focused Read-Only Analysis
 
 ```bash
-# Include file contents in prompt
+# Keep analysis narrow: name the files or directories you want summarized.
 $GTIMEOUT 120 "$VIBE" \
-  --headless \
-  --no-prompt \
-  review -f "@src/utils.ts" \
-  -p "Review this utility file for best practices" 2>/dev/null > /tmp/vibe-utils-review.md
+  -p "Read rules/general.md and references/cross-cutting-rules.md, then summarize the external-agent driver boundary in 5 bullets." \
+  --output text \
+  --max-turns 10 \
+  --enabled-tools "read_file" \
+  --enabled-tools "grep" \
+  --workdir /path/to/project \
+  2>/dev/null > /tmp/vibe-analysis.md
+```
+
+Do **not** use `--agent plan` for one-shot headless analysis. On Vibe 2.4.2 it
+enters the CLI's plan-mode workflow, requires a plan file, and can burn turns
+without ever producing a final answer.
+
+### Tool-Restricted Run
+
+```bash
+# Only allow bash and read_file (no writes)
+$GTIMEOUT 120 "$VIBE" \
+  -p "List all TODO comments in the project" \
+  --output text \
+  --max-turns 5 \
+  --enabled-tools "bash" \
+  --enabled-tools "read_file" \
+  --enabled-tools "grep" \
+  --workdir /path/to/project \
+  2>/dev/null > /tmp/vibe-todos.md
 ```
 
 ## Model Selection
 
-| Model ID | Use Case | Speed/Quality |
-|---|---|---|
-| `codestral-latest` | Code generation (default) | ⚡ Fast, 🎯 High accuracy |
-| `mistral-large-latest` | Complex reasoning | 🐢 Slower, 🧠 Highest quality |
-| `mistral-medium-latest` | Balanced tasks | ⏱️  Medium, ⭐ Good quality |
-| `mistral-small-latest` | Simple tasks | 🚀 Fastest, ✅ Adequate quality |
+Models are configured in `~/.vibe/config.toml`, not via CLI flags:
 
-**Best practice:** Use `codestral-latest` for code generation (default in meta-execute).
-Use `mistral-large-latest` for complex analysis and documentation tasks.
+```toml
+active_model = "devstral-2"  # default
+```
+
+| Model (alias) | Provider | Use Case |
+|---|---|---|
+| `devstral-2` | Mistral API | Code generation (default) |
+| `devstral-small` | Mistral API | Lighter/cheaper tasks |
+| `local` | llamacpp | Offline/local inference |
+
+To use a different model, create a custom agent config at `~/.vibe/agents/NAME.toml`:
+
+```toml
+active_model = "devstral-small"
+```
+
+Then invoke with `--agent NAME`.
+
+## Available Tools
+
+Vibe has these built-in tools (use with `--enabled-tools` to restrict):
+
+| Tool | Permission | Purpose |
+|---|---|---|
+| `read_file` | always | Read file contents |
+| `grep` | always | Recursive code search (ripgrep) |
+| `bash` | ask (auto in `-p`) | Execute shell commands |
+| `write_file` | ask (auto in `-p`) | Create/modify files |
+| `search_replace` | ask (auto in `-p`) | Patch files with replacements |
+| `task` | ask | Delegate to subagents (`explore` built-in) |
+| `web_search` | ask | Search the web |
+| `web_fetch` | ask | Fetch URL content |
+| `todo` | always | Track work items |
+| `ask_user_question` | always | Prompt user (no-op in `-p` mode) |
 
 ## Output Validation (MANDATORY)
 
-**Vibe produces concise output** — expect 50-500 characters for typical responses.
+**Vibe produces concise output** — smoke tests and exact-match prompts may be
+2-20 characters, while substantive review/generation responses are usually
+50+ characters. Validate based on task type, not a fixed global threshold.
 
 ```bash
 # Validate output file
@@ -118,9 +214,12 @@ if [ ! -s /tmp/vibe-output.md ]; then
   exit 1
 fi
 
-# Check character count (expect ≥ 50 chars for real response)
+# Character-count heuristic:
+# - Smoke tests / exact-match prompts: EXPECT_MIN_CHARS=1 (default)
+# - Real review / generation tasks: EXPECT_MIN_CHARS=50
+EXPECT_MIN_CHARS="${EXPECT_MIN_CHARS:-1}"
 CHARS=$(wc -c < /tmp/vibe-output.md 2>/dev/null | tr -d ' ')
-if [ "${CHARS:-0}" -lt 50 ]; then
+if [ "${CHARS:-0}" -lt "$EXPECT_MIN_CHARS" ]; then
   echo "ERROR: Vibe output too small (${CHARS} chars)" >&2
   exit 1
 fi
@@ -128,13 +227,23 @@ fi
 
 ## Critical Gotchas
 
-1. **`--headless --no-prompt` are MANDATORY** — without them, CLI hangs indefinitely
-2. **Always wrap with `$GTIMEOUT`** — CLI hangs on tool call failures
+1. **`-p` is MANDATORY for automation** — without it, CLI enters interactive TUI and hangs
+2. **Always wrap with `$GTIMEOUT`** — CLI can hang on tool call failures
 3. **Character count > line count** — Vibe produces compact, dense output
-4. **Exit codes**: `0` = success, `1` = error, `130` = timeout
-5. **`2>/dev/null` is mandatory** — stderr contains progress artifacts
-6. **Model defaults**: No `--model` flag uses Mistral's default (usually `mistral-medium`)
-7. **Concurrency**: Max 3 simultaneous Vibe processes (track with PID file)
+4. **No `--model` flag** — model selection is config-only (`~/.vibe/config.toml` or `--agent`)
+5. **`2>/dev/null` recommended** — stderr can contain progress/status noise
+6. **Exit codes**: `0` = success, `1` = error, `124` = timeout (from gtimeout)
+7. **Concurrency**: Max 3 simultaneous Vibe processes
+8. **`--workdir`** sets the project root — Vibe reads project context from this directory
+9. **Positional prompt** (without `-p`) enters interactive mode — never use in automation
+10. **Broad repo-analysis prompts can hit turn limits** — keep analysis prompts
+    narrow, name the target files/directories, and prefer `--enabled-tools`
+    for focused read-only runs.
+11. **`--agent plan` is not a lightweight analysis profile** — it activates
+    Vibe plan mode and is a poor fit for one-shot CLI calls.
+12. **Code-generation prompts must name the exact coding scope** — specify the
+    work unit, target files, expected output format, and what not to touch.
+    Do not ask Vibe to discover the scope itself.
 
 ## Concurrency Limit (MANDATORY)
 
@@ -165,8 +274,9 @@ echo $! >> /tmp/vibe-slots.pid
 | Failure Mode | Fallback |
 |---|---|
 | CLI not installed | Try Codex (`/codex`); then Claude direct generation |
-| Timeout (exit 130) | Retry once with 240s; then try Codex |
-| Empty output | Try different model; then try Codex |
+| Timeout (exit 124) | Retry once with 240s; then try Codex |
+| Turn limit reached (exit 1 + `vibe_stop_event`) | Tighten the prompt, name specific files, restrict tools, or switch to Cursor/Codex for repo-wide analysis |
+| Empty output | Retry with more `--max-turns`; then try Codex |
 | Rate limit | Queue and retry after 60s; then try Codex |
 
 ## Real-World Examples (From meta-execute)
@@ -174,50 +284,22 @@ echo $! >> /tmp/vibe-slots.pid
 ```bash
 # Generation work unit (meta-execute pattern)
 $GTIMEOUT 180 "$VIBE" \
-  --headless \
-  --no-prompt \
-  --model codestral-latest \
-  generate -p "$(cat /tmp/wu-feature-x-prompt.md)" 2>/dev/null > /tmp/wu-feature-x-vibe.md
-
-# Parallel generation with Codex
-$GTIMEOUT 180 "$VIBE" \
-  --headless \
-  --no-prompt \
-  --model codestral-latest \
-  generate -p "$(cat /tmp/prompt.md)" 2>/dev/null > /tmp/vibe-output.md &
-VIBE_PID=$!
-
-$GTIMEOUT 180 "$CODEX" exec --ephemeral -c "$(cat /tmp/prompt.md)" 2>/dev/null > /tmp/codex-output.md &
-CODEX_PID=$!
-
-wait $VIBE_PID $CODEX_PID
-
-# Compare outputs and select best
-if [ -s /tmp/vibe-output.md ] && [ -s /tmp/codex-output.md ]; then
-  # Implementation selection logic here
-fi
+  -p "$(cat /tmp/wu-feature-x-prompt.md)" \
+  --output text \
+  --max-turns 15 \
+  --workdir /path/to/project \
+  2>/dev/null > /tmp/wu-feature-x-vibe.md
 ```
 
-## Performance Characteristics
-
-**Benchmark (from meta-execute usage):**
-- **Cold start**: ~2-3s (CLI load time)
-- **Typical generation**: 5-15s for 50-200 LOC
-- **Complex analysis**: 15-45s for architecture reviews
-- **Concurrency**: 3 parallel processes optimal
-- **Token efficiency**: ~2-3x more efficient than Codex for code tasks
-
-**When to use Vibe:**
-- ✅ Fast code generation (primary use case)
-- ✅ Code review and analysis
-- ✅ Simple refactoring suggestions
-- ✅ Documentation generation
-
-**When to avoid Vibe:**
-- ❌ Complex multi-step workflows
-- ❌ Web research (no grounding)
-- ❌ Architecture decisions (use Claude)
-- ❌ Security-critical code (use multiple reviewers)
+```bash
+# Parallel generation with Codex as second generator
+# (Vibe invocation as above, background'd; then for Codex:)
+# Load /codex for invocation syntax. Key params:
+# --sandbox workspace-write, --ephemeral, --cd /path/to/project, 180s timeout.
+# Prompt: $(cat /tmp/prompt.md). Output to /tmp/codex-output.md (background).
+#
+# wait for both PIDs, then compare /tmp/vibe-output.md and /tmp/codex-output.md
+```
 
 ---
 

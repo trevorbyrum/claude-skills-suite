@@ -21,6 +21,12 @@ These rules apply to every skill in the suite. Every atomic SKILL.md must follow
    - If a skill needs more, queue excess and launch as slots free up. Do NOT launch all at once.
    - These limits come from `general.md` and override any per-skill instructions.
 
+6. **Driver skill boundary (MANDATORY)** — Any skill that dispatches Gemini, Codex, Copilot, Cursor, or Vibe must reference the corresponding driver skill instead of embedding CLI details locally.
+   - Consuming skills may specify task type, prompt template, output path, concurrency, and fallback behavior.
+   - Consuming skills must NOT inline CLI commands, flags, auth/path setup, timeout syntax, model-selection syntax, or gotcha lists for those agents.
+   - If invocation details change, update the driver skill only.
+   - For Vibe, keep prompts narrowly scoped to named files/directories or a single work unit with explicit deliverables. Never ask it to scope the whole project first.
+
 ## Structured Note Schema
 
 Every note in `cnotes.md` uses this format. Insert newest first (top insertion below `## Notes (Newest First)`). Once a newer note exists above yours, your note is locked — do not modify it.

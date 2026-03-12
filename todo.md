@@ -23,6 +23,7 @@
 | 4b | Update meta-review Phase 1 with SAST integration | claude | done | 2026-03-11 | Phase 1.5 added: Semgrep MCP + SonarQube MCP + local CLIs (ruff/biome/oxlint/gitleaks). Results injected into all lens prompts. |
 | 4c | meta-execute multi-model pipeline | claude | done | 2026-03-12 | Cross-model Best-of-2 (Vibe+Cursor) + 5-reviewer panel (Codex+Sonnet+Cursor+Copilot+Gemini). Needs real-project validation. |
 | 4d | Validate Vibe/Cursor limits on real project | claude | open | 2026-03-12 | Running at conservative 2+2; may raise to 3+3 after testing |
+| 4e | Write ui-design SKILL.md + wire as 8th lens in meta-review | claude | open | 2026-03-12 | Directory scaffolded (Mar 11) but SKILL.md never written. User confirmed it was intended. |
 | 5 | Add fresh-findings reuse to all review skills | claude | open | 2026-03-07 | Stop duplicate scans (<24h check) |
 | 6 | Add Gemini to project-questions | claude | open | 2026-03-07 | Domain/competitor research before interview |
 | 7 | Add Opus subagent for meta-review synthesis | claude | open | 2026-03-07 | Better cross-lens pattern detection |
