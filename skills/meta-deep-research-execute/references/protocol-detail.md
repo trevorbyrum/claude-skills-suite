@@ -83,13 +83,14 @@ artifact DB per connector (written by the research-connector agent).
 ```bash
 CODEX=$(ls ~/.nvm/versions/node/*/bin/codex 2>/dev/null | sort -V | tail -1)
 test -x "$CODEX" || CODEX="/opt/homebrew/bin/codex"
+GTIMEOUT="/opt/homebrew/bin/gtimeout"; test -x "$GTIMEOUT" || GTIMEOUT="/opt/homebrew/bin/timeout"
 test -x "$CODEX" || { echo "Codex unavailable — reassigning to Sonnet"; }
 ```
 
 **Workers 1-3: Primary research** — each gets 1-2 technical sub-questions.
 
 ```bash
-timeout 180 "$CODEX" exec --ephemeral --sandbox read-only --skip-git-repo-check \
+$GTIMEOUT 180 "$CODEX" exec --ephemeral --sandbox read-only --skip-git-repo-check \
   --cd /path/to/project \
   "Research the following with technical precision. Check actual library
    docs, API signatures, and known issues. Do NOT speculate — say so if
@@ -119,7 +120,7 @@ Covers all sub-questions assigned to Codex devil's advocate in the dispatch
 table. Broader scope than primary workers to compensate for single worker.
 
 ```bash
-timeout 180 "$CODEX" exec --ephemeral --sandbox read-only --skip-git-repo-check \
+$GTIMEOUT 180 "$CODEX" exec --ephemeral --sandbox read-only --skip-git-repo-check \
   --cd /path/to/project \
   "You are a devil's advocate. Find evidence AGAINST the conventional
    wisdom. Look for: known bugs, failure cases, better alternatives,
@@ -326,7 +327,7 @@ source artifacts/db.sh && db_upsert 'meta-deep-research-execute' 'coverage-revie
 
 **Reviewer C — Codex** (parallel with Reviewer A — uses reserved slot 5):
 ```bash
-timeout 180 "$CODEX" exec --ephemeral --sandbox read-only \
+$GTIMEOUT 180 "$CODEX" exec --ephemeral --sandbox read-only \
   --add-dir {research_folder} \
   "You are a technical coverage auditor. This is a MANDATORY expansion
    phase — find what's missing in the research.
@@ -464,7 +465,7 @@ Output stored in artifact DB: `meta-deep-research-execute` / `debate` /
 
 **Codex Position:**
 ```bash
-timeout 180 "$CODEX" exec --ephemeral --sandbox read-only \
+$GTIMEOUT 180 "$CODEX" exec --ephemeral --sandbox read-only \
   --cd /path/to/project \
   "Read the Codex research findings and compile a position paper.
    Per sub-question: claim, evidence, confidence,
@@ -504,7 +505,7 @@ Output stored in artifact DB: `meta-deep-research-execute` / `debate` /
 source artifacts/db.sh
 CLAUDE_POS=$(db_read 'meta-deep-research-execute' 'debate' '{NNN}D/position-claude')
 GEMINI_POS=$(db_read 'meta-deep-research-execute' 'debate' '{NNN}D/position-gemini')
-timeout 180 "$CODEX" exec --ephemeral --sandbox read-only \
+$GTIMEOUT 180 "$CODEX" exec --ephemeral --sandbox read-only \
   "You are a technical fact-checker. Challenge these position papers:
    Claude: $CLAUDE_POS
    Gemini: $GEMINI_POS
@@ -550,7 +551,7 @@ source artifacts/db.sh
 CODEX_POS=$(db_read 'meta-deep-research-execute' 'debate' '{NNN}D/position-codex')
 CLAUDE_CHAL=$(db_read 'meta-deep-research-execute' 'debate' '{NNN}D/challenge-claude')
 GEMINI_CHAL=$(db_read 'meta-deep-research-execute' 'debate' '{NNN}D/challenge-gemini')
-timeout 180 "$CODEX" exec --ephemeral --sandbox read-only \
+$GTIMEOUT 180 "$CODEX" exec --ephemeral --sandbox read-only \
   "Read challenges against your position and respond per claim:
    CONCEDE / REBUT / ESCALATE with evidence.
 

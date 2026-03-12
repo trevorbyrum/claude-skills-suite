@@ -1,6 +1,6 @@
 ---
 name: todo-features
-description: Use when todo.md or features.md needs creating or updating. Runs after completing work, changing scope, or updating project-plan.md or project-context.md.
+description: Updates todo.md and features.md to reflect current project state. Invoke explicitly with /todo-features — do NOT auto-trigger after other skills.
 argument-hint: [optional: "todo" to update only todo.md, "features" to update only features.md, omit to update both]
 ---
 

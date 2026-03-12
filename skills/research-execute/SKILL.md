@@ -173,7 +173,8 @@ note the shortfall in the synthesis and flag thin connectors.
    **Counter 3 — Codex CLI:**
    ```bash
    CODEX=$(ls ~/.nvm/versions/node/*/bin/codex 2>/dev/null | sort -V | tail -1); test -x "$CODEX" || CODEX="/opt/homebrew/bin/codex"
-   timeout 120 "$CODEX" exec --ephemeral --sandbox read-only --skip-git-repo-check \
+   GTIMEOUT="/opt/homebrew/bin/gtimeout"; test -x "$GTIMEOUT" || GTIMEOUT="/opt/homebrew/bin/timeout"
+   $GTIMEOUT 120 "$CODEX" exec --ephemeral --sandbox read-only --skip-git-repo-check \
    "Review this research synthesis for technical accuracy. Flag \
    any claims about libraries, frameworks, or APIs that are outdated or \
    incorrect. $(cat artifacts/research/summary/{NNN}-{topic-slug}.md)" \
@@ -181,9 +182,20 @@ note the shortfall in the synthesis and flag thin connectors.
    source artifacts/db.sh && db_upsert 'research-execute' 'counter' '{NNN}/codex' "$(cat /tmp/counter-codex.md)" && rm /tmp/counter-codex.md
    ```
 
-   Launch all three in parallel. If Gemini or Codex is unavailable, note it
-   in the synthesis and proceed with whatever counters succeeded. At minimum,
-   the Sonnet counter always runs.
+   Launch all three in parallel. If Gemini fails (unavailable, timeout, or
+   empty output), retry with Copilot as a fallback:
+   ```bash
+   COPILOT="/opt/homebrew/bin/copilot"
+   $GTIMEOUT 120 "$COPILOT" --allow-all-tools --no-ask-user --no-color --disable-builtin-mcps -s \
+   -p "Read this research synthesis and challenge it. Identify weak \
+   evidence, missing angles, and overclaimed conclusions. Be adversarial. \
+   $(cat artifacts/research/summary/{NNN}-{topic-slug}.md)" 2>/dev/null \
+   > /tmp/counter-copilot.md
+   source artifacts/db.sh && db_upsert 'research-execute' 'counter' '{NNN}/copilot' "$(cat /tmp/counter-copilot.md)" && rm /tmp/counter-copilot.md
+   ```
+   Store Copilot counters under label `copilot` — they count equivalently to
+   Gemini for synthesis purposes. If both Gemini and Copilot fail, note it
+   and proceed. At minimum, the Sonnet counter always runs.
 
 10. **Integrate counter feedback.** Read all counters from the artifact DB:
     ```bash

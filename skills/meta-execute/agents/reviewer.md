@@ -1,6 +1,12 @@
-# Review Subagent Prompt
+# Shared Review Prompt Template
 
-Prompt template for the work-unit review subagent dispatched in Phase 4.
+Prompt template used by 4 of the 5 reviewers in the panel: Sonnet subagent,
+Cursor (--mode ask), Copilot, and Gemini. These are all **read-only**
+reviewers — they score code but do NOT modify files.
+
+For the Codex review+fix prompt (the only reviewer that writes files),
+see `codex-reviewer.md`.
+
 Fill in all bracketed placeholders before spawning.
 
 Uses the **Agentic Rubrics** pattern: generate a checklist FROM the spec
@@ -9,6 +15,10 @@ justify what they see rather than checking what should exist.
 
 Research basis: 002D Part 3 — Raghavendra et al. (2026), 54.2% SWE-bench
 Verified using rubrics generated from task description, not from code.
+
+**IMPORTANT**: Subagents do NOT have access to the artifact DB. Do NOT
+include DB write steps in subagent prompts. The main thread extracts
+the verdict text from the subagent's response and writes to DB itself.
 
 ---
 
@@ -79,12 +89,6 @@ Classify the failure type if not ACCEPT:
   the approach is sound but has mechanical bugs
 - **PERMANENT**: Logic gaps, architectural misunderstanding, wrong API usage,
   missing core functionality — the fundamental approach is flawed
-
-Write the verdict to the artifact DB:
-```bash
-source artifacts/db.sh
-db_write 'meta-execute' 'verdict' '[WU-ID]' "$VERDICT_TEXT"
-```
 
 Verdict format:
 

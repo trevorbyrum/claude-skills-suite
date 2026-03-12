@@ -1,6 +1,6 @@
 ---
 name: project-scaffold
-description: "Scaffolds a new project with standard folder structure, templates, and config files. Triggers on scaffold, set up a new project, init project, or when standard files are missing."
+description: "Scaffolds a new project with standard folder structure, templates, and config files. Use when the user asks to scaffold or set up a new project."
 disable-model-invocation: true
 ---
 

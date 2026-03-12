@@ -41,8 +41,15 @@ execution.
    > /tmp/competitive-landscape.md
    ```
    Read the output and incorporate relevant insights into the plan (especially
-   "lessons learned" and "differentiation"). If Gemini is unavailable, skip
-   and note it.
+   "lessons learned" and "differentiation"). If Gemini is unavailable or fails,
+   retry with Copilot:
+   ```bash
+   COPILOT="/opt/homebrew/bin/copilot"
+   $GTIMEOUT 120 "$COPILOT" --allow-all-tools --no-ask-user --no-color --disable-builtin-mcps -s \
+     -p "For a project described as: [one-line summary from context]. List the top 5 competing or similar projects/products. For each: name, what it does, strengths, weaknesses, and what this project could learn from it. Bullet points only." \
+     2>/dev/null > /tmp/competitive-landscape.md
+   ```
+   If both fail, skip and note it.
 
 3. **Technical feasibility check.** Call Codex CLI for a quick sanity check on
    the proposed tech stack:
@@ -50,11 +57,12 @@ execution.
    CODEX=$(ls ~/.nvm/versions/node/*/bin/codex 2>/dev/null | sort -V | tail -1)
    test -x "$CODEX" || CODEX="/opt/homebrew/bin/codex"
    GTIMEOUT="/opt/homebrew/bin/gtimeout"; test -x "$GTIMEOUT" || GTIMEOUT="/opt/homebrew/bin/timeout"
-   $GTIMEOUT 60 "$CODEX" exec --skip-git-repo-check \
+   $GTIMEOUT 60 "$CODEX" exec --ephemeral --sandbox read-only --skip-git-repo-check \
+     -o /tmp/feasibility-check.txt -C /tmp \
      "Given this tech stack: [stack from context]. And this scope: \
    [scope summary]. Flag any technical risks: library maturity issues, known \
    scaling problems, integration pain points, or missing pieces. Be specific." \
-   --json -C /tmp > /tmp/feasibility-check.json
+   2>/dev/null
    ```
    Read the output and factor risks into the plan. If Codex is unavailable,
    skip and note it.
@@ -183,7 +191,7 @@ If yes:
    CODEX=$(ls ~/.nvm/versions/node/*/bin/codex 2>/dev/null | sort -V | tail -1)
    test -x "$CODEX" || CODEX="/opt/homebrew/bin/codex"
    GTIMEOUT="/opt/homebrew/bin/gtimeout"; test -x "$GTIMEOUT" || GTIMEOUT="/opt/homebrew/bin/timeout"
-   $GTIMEOUT 60 "$CODEX" exec --full-auto --ephemeral --skip-git-repo-check \
+   $GTIMEOUT 60 "$CODEX" exec --ephemeral --skip-git-repo-check --sandbox workspace-write \
      --cd <project-root> \
      "Generate skeleton files for this work unit. Create the file structure with interfaces, type definitions, function signatures (with TODO bodies), and module exports. Do NOT implement business logic — just the structure.
 

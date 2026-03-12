@@ -8,13 +8,16 @@ These rules apply to every skill in the suite. Every atomic SKILL.md must follow
 
 2. **Log to cnotes.md** — Notable decisions, context changes, and rationale. If `cnotes.md` does not exist, create it with the header `# Collaboration Notes` and `## Notes (Newest First)` before logging. This is also enforced by the Stop hook, but skills should do this proactively.
 
-3. **Update todo.md** — Any new action items discovered during execution.
+3. **Note todo/feature changes** — If you discover new action items or feature changes, mention them in your response so the user can run `/todo-features` if needed. Do NOT auto-invoke todo-features or update those files directly.
 
-4. **Update features.md** — Any feature changes or discoveries.
+4. *(Merged into rule 3 above)*
 
 5. **CLI concurrency limits (MANDATORY)** — Never exceed these simultaneous process counts:
    - **Codex**: max **5** concurrent `codex exec` processes
+   - **Vibe (Mistral)**: max **3** concurrent `vibe` processes
+   - **Cursor**: max **3** concurrent `agent` processes
    - **Gemini**: max **2** concurrent `gemini` processes
+   - **Copilot**: max **2** concurrent `copilot -p` processes
    - If a skill needs more, queue excess and launch as slots free up. Do NOT launch all at once.
    - These limits come from `general.md` and override any per-skill instructions.
 

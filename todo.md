@@ -9,7 +9,7 @@
 |---|------|-------|--------|-------|-------|
 | 1 | Trim all skill descriptions to ≤150 chars | claude | open | 2026-03-07 | Prevent silent skill exclusion from description budget |
 | 2 | Make 7 review skills thin wrappers with shared logic | claude | open | 2026-03-07 | Reduce duplication; shared output format, severity, dispatch |
-| 2a | Troubleshoot Codex/Gemini in subagents | claude | open | 2026-03-11 | Codex: probably need to run `codex app server` (background daemon) so subagents can connect. Gemini: still timing out in subagents. Both worked interactively but fail in background/subagent shells. |
+| 2a | Troubleshoot Codex/Gemini in subagents | claude | open | 2026-03-11 | Codex: likely stale CLI templates (prompt-before-flags, bare `timeout`, outdated `app server` assumption), not a missing daemon. Gemini: still timing out in subagents. Both worked interactively but fail in background/subagent shells. |
 | 2b | Add project docs (cnotes, features, todo) to meta-init scaffold | claude | open | 2026-03-11 | meta-init should create these files during project init |
 | 2c | Auto-update Homelab Tools memory after github-sync | claude | open | 2026-03-11 | github-sync skill should store project state to qdrant memory after every push so home Claude stays current |
 
@@ -19,8 +19,10 @@
 |---|------|-------|--------|-------|-------|
 | 3 | Deep research: test-review skill upgrade | claude | done | 2026-03-11 | 003D complete — 45+ sources, 6 gaps found. Apply next. |
 | 4 | Deep research: meta-production skill upgrade | claude | done | 2026-03-11 | 004D complete — 127 cited, 11 sub-questions, 6 contested. Apply next. |
-| 4a | Connect SonarQube MCP | claude | open | 2026-03-11 | Needs tower Tailscale IP + SonarQube token. Add to ~/.mcp.json |
-| 4b | Update meta-review Phase 1 with SAST integration | claude | open | 2026-03-11 | Run Semgrep/Ruff/Biome before LLM reviews, pipe SARIF output. Highest leverage. |
+| 4a | Connect SonarQube MCP | claude | done | 2026-03-11 | Swapped npm→official Docker image `mcp/sonarqube`. Connection verified (0 projects, fresh install). Token in Vault services/sonarqube. |
+| 4b | Update meta-review Phase 1 with SAST integration | claude | done | 2026-03-11 | Phase 1.5 added: Semgrep MCP + SonarQube MCP + local CLIs (ruff/biome/oxlint/gitleaks). Results injected into all lens prompts. |
+| 4c | meta-execute multi-model pipeline | claude | done | 2026-03-12 | Cross-model Best-of-2 (Vibe+Cursor) + 5-reviewer panel (Codex+Sonnet+Cursor+Copilot+Gemini). Needs real-project validation. |
+| 4d | Validate Vibe/Cursor limits on real project | claude | open | 2026-03-12 | Running at conservative 2+2; may raise to 3+3 after testing |
 | 5 | Add fresh-findings reuse to all review skills | claude | open | 2026-03-07 | Stop duplicate scans (<24h check) |
 | 6 | Add Gemini to project-questions | claude | open | 2026-03-07 | Domain/competitor research before interview |
 | 7 | Add Opus subagent for meta-review synthesis | claude | open | 2026-03-07 | Better cross-lens pattern detection |

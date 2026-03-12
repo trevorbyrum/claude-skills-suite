@@ -101,6 +101,25 @@ This produces `mcp startup: no servers` — zero MCP overhead.
 - Tasks that need SSH access to remote servers
 - Full-auto code generation that may need external context
 
+## App Server vs Exec
+
+`codex exec` is self-contained. It does **not** require a separate background
+daemon to run reliably.
+
+- `codex app-server` is for tooling that speaks the Codex app-server protocol
+- `codex mcp-server` exposes Codex as an MCP server for other clients
+- `codex app` launches the desktop app
+
+Do **not** try to fix headless `exec` failures by launching `codex app server`
+or `codex app-server` in the background. Fix the CLI invocation instead.
+
+## Approval Flag Reality Check
+
+On this machine's `codex-cli 0.104.0`, `codex exec` accepts `--full-auto` but
+rejects `-a/--ask-for-approval`. Older docs and examples may still mention
+approval flags, but for this repo's headless `exec` templates, treat the local
+CLI help as the source of truth.
+
 ## Task-Type Templates
 
 **Every template below includes `--skip-git-repo-check`** — it's harmless in
@@ -125,13 +144,13 @@ RESULT=$($GTIMEOUT 120 "$CODEX" exec --ephemeral --skip-git-repo-check --sandbox
 echo "$RESULT" > OUTPUT_FILE
 ```
 
-### Code Generation (Full Auto)
+### Code Generation (Workspace Write)
 
-When Codex needs to write files, use `--full-auto` which grants filesystem
-and network access:
+When Codex needs to write files in headless mode, prefer an explicit sandbox
+mode over `--full-auto` so the write policy is obvious:
 
 ```bash
-$GTIMEOUT 120 "$CODEX" exec --full-auto --ephemeral --skip-git-repo-check -C /path/to/project "Add input validation to all API route handlers" 2>/dev/null
+$GTIMEOUT 120 "$CODEX" exec --ephemeral --skip-git-repo-check --sandbox workspace-write -C /path/to/project "Add input validation to all API route handlers" 2>/dev/null
 ```
 
 ### Structured Output
@@ -176,21 +195,22 @@ $GTIMEOUT 120 "$CODEX" exec --ephemeral --skip-git-repo-check -C /path/to/projec
    (last arg after all flags). Using `-p "some text"` causes
    `Error: config profile 'some text' not found`. NEVER use `-p` to pass a prompt.
 
-3. **Default sandbox is READ-ONLY** — `codex exec` without `--full-auto`
-   or `--sandbox workspace-write` cannot modify files. This is intentional
-   for review tasks, but forgetting it for generation tasks means silent
-   no-ops.
+3. **Default sandbox is READ-ONLY** — `codex exec` without
+   `--sandbox workspace-write`, `--full-auto`, or `--sandbox danger-full-access`
+   cannot modify files. This is intentional for review tasks, but forgetting it
+   for generation tasks means silent no-ops.
 
-4. **Network is blocked in `workspace-write` mode** — only `--full-auto`
-   grants both filesystem and network access. If a generation task needs to
-   fetch dependencies, use `--full-auto`.
+4. **`--full-auto` is not "network on"** — on current Codex CLI builds it is a
+   convenience shortcut around workspace-write behavior. Do not assume it enables
+   network access. If a task truly needs network, use `--sandbox danger-full-access`
+   only inside an already sandboxed environment.
 
 5. **Always include `--skip-git-repo-check`** — running in a non-repo directory
    fails with exit code 1 and no output. This flag is harmless in git repos.
 
-6. **Flag placement matters** — global flags go after `exec`:
-   `codex exec --full-auto --ephemeral "prompt"`. Putting flags after the
-   prompt string causes them to be treated as part of the prompt.
+6. **Flag placement matters** — the prompt goes last:
+   `codex exec --ephemeral --sandbox read-only "prompt"`. Putting flags after
+   the prompt string causes parse errors or turns those flags into prompt text.
 
 7. **`--json` outputs JSONL, not a single JSON object** — each line is a
    separate event (message, tool call, result). Parse line-by-line, not as
@@ -217,7 +237,6 @@ $GTIMEOUT 120 "$CODEX" exec --ephemeral --skip-git-repo-check -C /path/to/projec
 
 | Short | Long | Purpose |
 |---|---|---|
-| `-a` | `--ask-for-approval` | Approval policy (`on-request`, `on-failure`, `never`) |
 | `-c` | `--config` | Override config key=value |
 | `-C` | `--cd` | Working directory |
 | `-i` | `--image` | Attach image(s) |
@@ -226,8 +245,9 @@ $GTIMEOUT 120 "$CODEX" exec --ephemeral --skip-git-repo-check -C /path/to/projec
 | `-p` | `--profile` | Config profile (**NOT prompt**) |
 | `-s` | `--sandbox` | Sandbox mode |
 | `-V` | `--version` | Print version |
-| — | `--yolo` | Alias for `--dangerously-bypass-approvals-and-sandbox` |
-| — | `--search` | Use MCP server as search tool |
+| — | `--full-auto` | Convenience shortcut for automatic workspace-write runs |
+| — | `--dangerously-bypass-approvals-and-sandbox` | Disable sandbox and approvals |
+| — | `--search` | Enable native web search for the agent |
 
 ## Sandbox Mode Reference
 
@@ -237,8 +257,8 @@ $GTIMEOUT 120 "$CODEX" exec --ephemeral --skip-git-repo-check -C /path/to/projec
 | `workspace-write` | Read + Write | Blocked | Local code generation |
 | `danger-full-access` | Read + Write | Allowed | Generation needing deps/APIs |
 
-Note: `--full-auto` is a convenience alias for `-s workspace-write` with
-auto-approval. For full network access, use `-s danger-full-access`.
+Note: prefer explicit `--sandbox workspace-write` in this repo's headless
+templates. For full network access, use `--sandbox danger-full-access`.
 
 ## Fallback Behavior
 

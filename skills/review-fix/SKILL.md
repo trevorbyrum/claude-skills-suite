@@ -146,8 +146,9 @@ For each approved fix unit, dispatch a worker:
 **Codex worker:**
 ```bash
 CODEX=$(ls ~/.nvm/versions/node/*/bin/codex 2>/dev/null | sort -V | tail -1)
-GTIMEOUT="/opt/homebrew/bin/gtimeout"
-$GTIMEOUT 120 "$CODEX" exec --full-auto --ephemeral --skip-git-repo-check \
+test -x "$CODEX" || CODEX="/opt/homebrew/bin/codex"
+GTIMEOUT="/opt/homebrew/bin/gtimeout"; test -x "$GTIMEOUT" || GTIMEOUT="/opt/homebrew/bin/timeout"
+$GTIMEOUT 120 "$CODEX" exec --ephemeral --skip-git-repo-check --sandbox workspace-write \
   -C <project-root> "FIXER_PROMPT" 2>/dev/null
 ```
 

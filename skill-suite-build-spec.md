@@ -499,8 +499,15 @@ The cross-cutting rules are:
 - **Task-type templates**:
 
   **Research / Analysis (no tools needed — safest):**
+  *Use this pattern to avoid shell quoting issues with inline prompts.*
   ```bash
-  timeout 120 gemini -p "PROMPT" 2>/dev/null > OUTPUT_FILE
+  # 1. Write prompt to temp file (prevents quoting errors)
+  cat <<'EOF' > /tmp/gemini_prompt.md
+  PROMPT
+  EOF
+  # 2. Run with env cleanup and error capture
+  unset DEBUG GOOGLE_CLOUD_PROJECT CI
+  cat /tmp/gemini_prompt.md | timeout 120 gemini 2>/tmp/gemini_error.log > OUTPUT_FILE || cat /tmp/gemini_error.log >> OUTPUT_FILE
   ```
 
   **With file context (@ syntax reads files client-side):**

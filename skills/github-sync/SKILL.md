@@ -1,6 +1,6 @@
 ---
 name: github-sync
-description: Use when committing and pushing changes to GitHub. Also runs as the first step of meta-clear. Applies whenever there are uncommitted changes in the working tree.
+description: Commits and pushes changes to GitHub. Invoke explicitly with /github-sync or when user says "commit", "push", or "sync to GitHub".
 argument-hint: [commit message, --amend to amend last commit, --branch <name> to push to a specific branch]
 ---
 

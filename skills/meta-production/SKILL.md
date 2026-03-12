@@ -98,7 +98,8 @@ determine the service criticality tier.
 GTIMEOUT="/opt/homebrew/bin/gtimeout"
 GEMINI="/Users/trevorbyrum/.npm-global/bin/gemini"
 test -x "$GEMINI" || GEMINI="/opt/homebrew/bin/gemini"
-test -x "$GEMINI" || { echo "Gemini unavailable — skipping stack research"; }
+test -x "$GEMINI" || { echo "Gemini unavailable — trying Copilot"; }
+COPILOT="/opt/homebrew/bin/copilot"
 ```
 
 If Gemini is available, run:
@@ -119,9 +120,14 @@ $GTIMEOUT 120 "$GEMINI" -p \
 
 Replace `[STACK]` with the actual tech stack from project-context.md.
 
-If Gemini is unavailable, use Claude WebSearch to research the same topics.
-Stack research is NOT optional — the production-specific checks in Phase 2
-use these findings to know what to look for.
+If Gemini is unavailable or fails, retry with Copilot:
+```bash
+$GTIMEOUT 120 "$COPILOT" --allow-all-tools --no-ask-user --no-color --disable-builtin-mcps -s \
+  -p "Research production readiness best practices for a [STACK] application. [same prompt as above]" \
+  2>/dev/null > /tmp/prr-stack-research.md
+```
+If both Gemini and Copilot fail, use Claude WebSearch. Stack research is NOT
+optional — the production-specific checks in Phase 2 use these findings.
 
 ### Phase 2: Parallel Scan
 
@@ -220,7 +226,13 @@ db_upsert 'meta-production' 'scan' 'practices-audit' "$(cat /tmp/prr-practices.m
 rm /tmp/prr-practices.md
 ```
 
-If Gemini is unavailable, skip this track. It enriches the report but
+If Gemini is unavailable or fails, retry Track C with Copilot:
+```bash
+$GTIMEOUT 120 "$COPILOT" --allow-all-tools --no-ask-user --no-color --disable-builtin-mcps -s \
+  -p "Compare these production best practices against the actual codebase. [same prompt as above]" \
+  2>/dev/null > /tmp/prr-practices.md
+```
+If both Gemini and Copilot fail, skip this track. It enriches the report but
 isn't required for scoring.
 
 ### Phase 3: Scoring
@@ -332,8 +344,9 @@ codebase may have changed.
 
 ## Error Handling
 
-- If Gemini is unavailable: use Claude WebSearch for stack research (Phase 1),
-  skip Track C (practices audit). Note in methodology section.
+- If Gemini is unavailable: try Copilot as fallback for stack research (Phase 1)
+  and Track C (practices audit). If both fail, use Claude WebSearch for Phase 1
+  and skip Track C. Note in methodology section.
 - If Codex is unavailable: run production antipattern checks as Sonnet
   subagents instead. Note reduced scan depth in methodology.
 - If both are unavailable: all scans run via Sonnet subagents. The report

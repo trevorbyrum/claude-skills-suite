@@ -1,6 +1,6 @@
 ---
 name: meta-context-save
-description: "Save session state and optionally commit+clear. Use when ending a session, switching tasks, compacting context, or when stop hook fires at >=80% context."
+description: "Save session state and optionally commit+clear. Use when the user asks to wrap up, save session, compact context, or end for the day."
 argument-hint: "[--compact to compact only (default), --clear to commit+compact+clear]"
 ---
 

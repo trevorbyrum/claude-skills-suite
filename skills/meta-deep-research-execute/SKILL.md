@@ -177,9 +177,11 @@ Report back to the dispatcher with ONLY:
 
 ## Error Handling
 
-- **Gemini unavailable**: Use WebSearch for Track D. Debate becomes 2-model.
+- **Gemini unavailable**: Try Copilot as fallback for Track D (same 2-slot
+  limit, same prompt patterns). If both fail, use WebSearch. Debate becomes 2-model.
 - **Codex unavailable**: Redistribute to Sonnet. Debate becomes 2-model.
-- **Both unavailable**: Claude only + self-consistency (3 Sonnet subagents).
+- **Both Gemini+Copilot unavailable**: WebSearch for Track D. Debate becomes 2-model.
+- **All CLIs unavailable**: Claude only + self-consistency (3 Sonnet subagents).
   Note "single-model" in methodology.
 - **Subagent/debate failure**: Note gap, mark affected claims UNCERTAIN.
   Proceed with available responses.

@@ -5,6 +5,162 @@
 
 ## Notes (Newest First)
 
+---CLAUDE--------------------
+note_id: CN-20260313-120000-CLAUDE
+timestamp_utc: 2026-03-13T12:00:00Z
+author: CLAUDE
+activity_type: CODE_WRITE
+work_scope: SAST pre-scan integration into meta-review (todo #4b)
+files_touched: skills/meta-review/SKILL.md, todo.md
+files_reviewed: skills/meta-review/SKILL.md
+summary: Added Phase 1.5 "SAST Pre-Scan" to meta-review. Claude main thread calls Semgrep MCP, SonarQube MCP, and local CLIs (ruff/biome/oxlint/gitleaks) before LLM reviews. Results injected into all lens prompts.
+details:
+  - Phase 1.5 has 4 parallel steps: Semgrep MCP scan_directory, SonarQube search_sonar_issues (if project exists), local CLIs (language-detected), gitleaks secrets scan
+  - $SAST_SUMMARY assembled and truncated to ~5000 chars (HIGH/BLOCKER/CRITICAL only)
+  - All 3 dispatch sections (Sonnet, Codex, Gemini) updated to include SAST context
+  - Sonnet subagents now cross-reference SAST findings (confirm/dispute/expand)
+  - Synthesis template updated with SAST Findings section (machine-verified, not LLM opinion)
+  - Architecture diagram updated to show pre-scan flow
+  - Graceful degradation: if ALL tools unavailable, LLM reviews still run
+  - SonarQube query only runs if project already exists — does NOT create projects or run sonar-scanner
+validation: structural review of SKILL.md edits — needs real /meta-review run to validate end-to-end
+risks_or_gaps: Not tested on a real project yet; SAST summary truncation at 5000 chars may lose findings on large codebases
+handoff_to: CLAUDE
+next_actions: Run /meta-review on Arbytr to validate Phase 1.5 end-to-end
+------------------------------
+
+---CLAUDE--------------------
+note_id: CN-20260313-110000-CLAUDE
+timestamp_utc: 2026-03-13T11:00:00Z
+author: CLAUDE
+activity_type: SETUP
+work_scope: SonarQube MCP verification + first full project scan
+files_touched: ~/.mcp.json, todo.md
+files_reviewed: Arbytr project (369 files indexed, 156 TS/JS analyzed)
+summary: Confirmed SonarQube MCP Docker swap working. Ran first full scan on Arbytr project — 36.9k LOC, quality gate PASSED, 27 bugs, 517 code smells, 32 security hotspots, 0 vulnerabilities.
+details:
+  - MCP connection verified: `search_my_sonarqube_projects` returned empty (fresh install) — confirmed live
+  - `analyze_code_snippet` tested on extension.ts — returned 5 issues (works without projectKey for local analysis)
+  - Created `arbytr` project via SonarQube API (`/api/projects/create`)
+  - JDK 21 already installed via Homebrew but not on PATH — used `JAVA_HOME` export to enable sonar-scanner
+  - Full scan via `npx sonar-scanner` — 369 files, 8 languages detected, 62s total
+  - 1 BLOCKER: infinite loop in `poll-history.mjs:214` (`stopped` not modified)
+  - 35 CRITICAL cognitive complexity violations (worst: `config.ts:165` at 120, limit is 15)
+  - `ChatPanelProvider.ts:83` complexity 70, `StatusPage.tsx:119` complexity 44
+  - `agora-core/src/types.ts` has 11 functions over complexity limit
+  - GUI accessible at http://tower:9000/dashboard?id=arbytr via Tailscale
+  - Todo #4a updated to reflect Docker swap + verification
+validation: Quality gate PASSED, all MCP tools functional, scan results visible in GUI
+risks_or_gaps: 0% test coverage reported (no lcov configured); security hotspots need manual triage
+handoff_to: CLAUDE
+next_actions: Triage 32 security hotspots; configure test coverage reporting; wire SonarQube into meta-review Phase 1 (todo #4b)
+------------------------------
+
+---CLAUDE--------------------
+note_id: CN-20260313-100000-CLAUDE
+timestamp_utc: 2026-03-13T10:00:00Z
+author: CLAUDE
+activity_type: SETUP
+work_scope: SonarQube MCP wiring (in progress)
+files_touched: none yet
+files_reviewed: ~/.mcp.json, cnotes.md
+summary: Verified all 5 local SAST tools installed. Researched SonarQube MCP server (official Docker image mcp/sonarqube). Waiting on user's SonarQube token to complete wiring.
+details:
+  - Tower Tailscale address: http://tower:9000 (SonarQube)
+  - User plans to expose SonarQube GUI through Cloudflare
+  - MCP server will connect via Tailscale directly (not Cloudflare)
+  - Official Docker image: mcp/sonarqube (Java/Gradle, JDK 21+)
+  - Env vars needed: SONARQUBE_TOKEN (user token), SONARQUBE_URL, STORAGE_PATH
+  - Default SonarQube creds: admin/admin (forces change on first login)
+  - Flagged: ~/.mcp.json has GitHub PAT + GitLab token in plaintext (todo #15)
+  - SonarQube container confirmed running on tower (since 2026-03-11, sonarqube:community v26.3.0, traefik_proxy network, no Traefik labels = no web exposure)
+  - Tower Tailscale IP: 100.127.173.50 (tower.elk-bangus.ts.net), 68ms from Mac
+  - SonarQube does NOT need public web exposure for MCP — Tailscale IP sufficient
+  - Docker Desktop NOT running on this Mac — can't run mcp/sonarqube Docker image until started
+  - No Vault recipe exists yet at services/sonarqube (404)
+  - Options presented: A) Docker Desktop, B) JDK build, C) tower-side (rejected). No JDK or Docker — used npm package instead
+  - npm package `sonarqube-mcp-server` (deprecated but functional) works as stdio MCP server
+  - Added to ~/.mcp.json with SONARQUBE_BASE_URL=http://100.127.173.50:9000
+  - Token stored in Vault at services/sonarqube (v1)
+  - Needs Claude Code restart to pick up new MCP server
+validation: All 5 tools confirmed installed; npm MCP server tested (starts without errors); Vault store confirmed (v1)
+  - User started Docker Desktop — swapped npm package for official mcp/sonarqube Docker image
+  - Docker 29.1.3 confirmed running, image pulled successfully
+risks_or_gaps: Need to test actual SonarQube queries after Claude Code restart
+handoff_to: CLAUDE
+next_actions: Restart Claude Code → verify sonarqube tools appear → test a query → wire into meta-review Phase 1
+------------------------------
+
+---CLAUDE--------------------
+note_id: CN-20260312-162434-CLAUDE
+timestamp_utc: 2026-03-12T16:24:34Z
+author: CLAUDE
+activity_type: CODE_REVIEW
+work_scope: Design meta-execute multi-model pipeline (Vibe + Cursor + Codex)
+files_touched: none (design phase)
+files_reviewed: meta-execute/SKILL.md, vibe/SKILL.md, cursor/SKILL.md, copilot/SKILL.md
+summary: Agreed on cross-model Best-of-N generation + 5-reviewer panel for meta-execute
+details:
+  - Generation: 1 Vibe + 1 Cursor per WU (cross-model Best-of-2), 2 WUs at a time (conservative start)
+  - Review panel (5 per WU, 2 WUs concurrent): Codex (fixes), Sonnet (rubric), Cursor --mode ask, Copilot, Gemini
+  - Codex role shifts from coder to editor+reviewer — reads Vibe/Cursor output, reviews against rubric, applies fixes
+  - Staggered pipeline (option B) to keep Cursor at ≤3 concurrent
+  - Synthesis: 3/5 ACCEPT → merge; any REJECT → Codex fixes informed by all 5; disagreement → Claude synthesizes
+  - Pending: implementation into meta-execute SKILL.md, worker.md, reviewer.md
+validation: not run (design only)
+risks_or_gaps: Vibe/Cursor output quality unknown until first real run; conservative 2+2 limits may need adjustment
+handoff_to: CLAUDE
+next_actions: Implement pipeline into meta-execute upon user approval
+------------------------------
+
+---CLAUDE--------------------
+note_id: CN-20260312-154500-CLAUDE
+timestamp_utc: 2026-03-12T15:45:00Z
+author: CLAUDE
+activity_type: CODE_WRITE
+work_scope: Add Copilot as Gemini fallback + fix concurrency limits
+files_touched: general.md, cross-cutting-rules.md, copilot/SKILL.md, gemini/SKILL.md, meta-review/SKILL.md, research-execute/SKILL.md, meta-production/SKILL.md, release-prep/SKILL.md, project-questions/SKILL.md, build-plan/SKILL.md, meta-deep-research-execute/SKILL.md
+files_reviewed: All 13 skills referencing Gemini
+summary: Copilot is now Gemini's primary fallback across all skills. Concurrency fixed 3→2.
+details:
+  - Fallback chain everywhere: Gemini → Copilot → WebSearch/skip (8 skill files updated)
+  - Copilot concurrency 3→2 in general.md, cross-cutting-rules.md, copilot/SKILL.md
+  - New CLI landscape: Gemini (free), Codex ($20/mo), Copilot (premium requests), Cursor (Pro+ student free)
+validation: grep scan confirmed all Gemini call sites now have Copilot fallback
+risks_or_gaps: Copilot/Cursor not yet tested in subagent/background shells — may need path fixes like Codex/Gemini needed
+handoff_to: none
+next_actions: Test Copilot fallback in real meta-review run; verify Cursor Agent CLI path
+------------------------------
+
+---CLAUDE--------------------
+note_id: CN-20260312-153000-CLAUDE
+timestamp_utc: 2026-03-12T15:30:00Z
+author: CLAUDE
+activity_type: CODE_WRITE
+work_scope: Fix infinite skill loop in Cursor IDE
+files_touched: skills/todo-features/SKILL.md, skills/github-sync/SKILL.md, skills/evolve/SKILL.md, references/cross-cutting-rules.md
+files_reviewed: All 39 skill SKILL.md frontmatter blocks
+summary: Diagnosed and fixed infinite loop caused by 3 skill descriptions acting as always-on rules + cross-cutting-rules amplifying them
+details:
+  - Root cause: todo-features ("Runs after completing work"), github-sync ("Applies whenever uncommitted changes"), evolve ("project changed") — these descriptions read as standing instructions, not slash-command triggers
+  - cross-cutting-rules forced every skill to update todo.md/features.md on completion, re-triggering the chain
+  - Fix: rewrote all 3 descriptions to require explicit /slash-command invocation
+  - Fix: cross-cutting-rules now says "mention changes in response" instead of "update files directly"
+validation: Grep scan of all SKILL.md descriptions confirmed no other always-on trigger language remains
+risks_or_gaps: Skills that explicitly call /github-sync or /todo-features as steps (meta-execute, review-fix, meta-context-save) still work — those are intentional inline calls, not description-driven auto-triggers
+handoff_to: none
+next_actions: Test in Cursor to confirm loop is broken; related to todo #1 (trim descriptions ≤150 chars)
+------------------------------
+
+### CN-20260312-093000-CLAUDE
+- Moved repo from iCloud (`~/Library/Mobile Documents/.../Shared/claude`) → `/Users/byrum_work/Projects/claude`
+- Reason: iCloud kept corrupting `.git/index` (all files showed as D + ?? on session start)
+- Fixed git index corruption via `git reset` before the move
+- Repointed 4 symlinks in `~/.claude/`: agents, hooks, rules, skills → new location
+- Migrated project config + memory to `~/.claude/projects/-Users-byrum-work-Projects-claude/`
+- GitHub remote unchanged: `trevorbyrum/claude-skills-suite`
+- Old iCloud copy still exists — user should delete after confirming new location works
+
 ### CN-20260311-221000-CLAUDE
 - Pushed to GitHub: 435099f (27 files, +5513 lines)
 - Semgrep MCP added to ~/.mcp.json (local, no API cost)

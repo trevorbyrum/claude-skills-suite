@@ -1,6 +1,6 @@
 ---
 name: evolve
-description: "Update living project documents when state changes. Use for evolving context, plan, or both. Triggers on evolve, update docs, sync docs, project changed."
+description: "Updates project-context.md and project-plan.md to reflect current truth. Invoke explicitly with /evolve or when user says 'update docs' or 'sync docs'."
 argument-hint: "[context — just context, plan — just plan, or describe what changed for both]"
 ---
 

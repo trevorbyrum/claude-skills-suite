@@ -185,7 +185,14 @@ After the changelog is drafted, generate user-friendly release notes:
      2>/dev/null
    ```
 3. Present both the technical changelog and user-facing notes for review.
-4. If Gemini is unavailable, skip user-facing notes — the technical changelog is sufficient.
+4. If Gemini is unavailable or fails, retry with Copilot:
+   ```bash
+   COPILOT="/opt/homebrew/bin/copilot"
+   $GTIMEOUT 60 "$COPILOT" --allow-all-tools --no-ask-user --no-color --disable-builtin-mcps -s \
+     -p "Convert this technical changelog into user-friendly release notes. Focus on what users care about: new features, fixed bugs, breaking changes that require action. Skip internal refactors. Write in a friendly, professional tone. Changelog: [CHANGELOG_CONTENT]" \
+     2>/dev/null
+   ```
+5. If both Gemini and Copilot fail, skip user-facing notes — the technical changelog is sufficient.
 
 ## Why Two Sources
 

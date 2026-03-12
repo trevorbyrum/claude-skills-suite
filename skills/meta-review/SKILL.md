@@ -1,31 +1,38 @@
 ---
 name: meta-review
-description: Comprehensive multi-model project review across 7 lenses and 3 model families in parallel. Use for full project review, pre-deploy audit, or milestone quality gate. Not for single-lens reviews.
+description: Comprehensive multi-model project review across 8 lenses and 3 model families in parallel. Use for full project review, pre-deploy audit, or milestone quality gate. Not for single-lens reviews.
 ---
 
 # meta-review
 
-Meta-skill that fans out 7 review lenses across 3 model families in parallel,
-then synthesizes findings into a unified report with confidence scoring.
+Meta-skill that runs SAST pre-scan (Semgrep, SonarQube, local CLIs), then
+fans out 8 review lenses across 3 model families in parallel with SAST
+context injected, then synthesizes into a unified report with confidence scoring.
 
 ## Architecture
 
 Sonnet-primary with targeted Codex/Gemini spot-checks on key lenses.
 
 ```
+                   +-- Semgrep MCP scan
+                   +-- SonarQube MCP query (if project exists)
+meta-review --> SAST pre-scan --+-- ruff / biome / oxlint / gitleaks (local CLIs)
+                   |
+                   v  $SAST_SUMMARY injected into all lens prompts
+                   |
                    +-- counter-review ----[Sonnet | Gemini]
                    +-- security-review ---[Sonnet | Codex]
                    +-- test-review ------[Sonnet]
-meta-review --> +-- refactor-review ---[Sonnet | Codex]       --> synthesis
+                   +-- refactor-review ---[Sonnet | Codex]       --> synthesis
                    +-- drift-review -----[Sonnet | Gemini]
                    +-- completeness-review -[Sonnet | Codex]
                    +-- compliance-review -[Sonnet]
 ```
 
-Total: **12 reviews** (7 Sonnet + 3 Codex + 2 Gemini), then 1 synthesis pass.
+Total: SAST pre-scan + **12 LLM reviews** (7 Sonnet + 3 Codex + 2 Gemini), then 1 synthesis pass.
 
 **Model assignment rationale:**
-- **Sonnet** (all 7): primary reviewer, full codebase access, no concurrency limit
+- **Sonnet** (all 8): primary reviewer, full codebase access, no concurrency limit
 - **Codex** (security, refactor, completeness): code-centric lenses where static analysis shines
 - **Gemini** (counter, drift): architecture/strategy lenses that benefit from web grounding
 
@@ -59,16 +66,108 @@ Total: **12 reviews** (7 Sonnet + 3 Codex + 2 Gemini), then 1 synthesis pass.
    CODEX=$(ls ~/.nvm/versions/node/*/bin/codex 2>/dev/null | sort -V | tail -1)
    test -x "$CODEX" || CODEX="/opt/homebrew/bin/codex"
    GTIMEOUT="/opt/homebrew/bin/gtimeout"; test -x "$GTIMEOUT" || GTIMEOUT="/opt/homebrew/bin/timeout"
+   COPILOT="/opt/homebrew/bin/copilot"
+   GEMINI="/Users/trevorbyrum/.npm-global/bin/gemini"
+   test -x "$GEMINI" || GEMINI="/opt/homebrew/bin/gemini"
    test -x "$CODEX" && echo "codex: available" || echo "codex: unavailable"
-   which gemini >/dev/null 2>&1 && echo "gemini: available" || echo "gemini: unavailable"
+   test -x "$GEMINI" && echo "gemini: available" || echo "gemini: unavailable"
+   test -x "$COPILOT" && echo "copilot: available" || echo "copilot: unavailable"
    ```
-   Note which models are available. Unavailable models are skipped — the
-   synthesis adjusts confidence scoring accordingly (2-model max instead of 3).
+   Note which models are available. Copilot is Gemini's fallback — if Gemini
+   is unavailable or fails, retry with Copilot before skipping. Unavailable
+   models are skipped — synthesis adjusts confidence scoring accordingly.
 
 4. Identify the ~10 most important source files for Gemini context. These
    are typically: entry point, main config, core business logic files, auth
    module, database layer, and any file >200 lines. Write this file list —
    Gemini invocations will reference them via `@path/to/file`.
+
+### Phase 1.5: SAST Pre-Scan
+
+Run static analysis tools **before** LLM reviews. Results are injected as
+context into every lens prompt so reviewers see real findings, not just vibes.
+
+All 3 steps run in parallel (no dependencies between them):
+
+#### Step 1: Semgrep MCP scan
+
+Call the Semgrep MCP tool directly (Claude has access as a global MCP tool):
+```
+mcp__semgrep__scan_directory(path: "<project-root>")
+```
+Store the result. If the tool is unavailable, skip and note in synthesis.
+
+#### Step 2: SonarQube MCP query
+
+Check if the project has a SonarQube project key:
+```
+mcp__sonarqube__search_my_sonarqube_projects(q: "<project-name>")
+```
+
+If a project exists, pull HIGH/BLOCKER issues and security hotspots:
+```
+mcp__sonarqube__search_sonar_issues_in_projects(
+  projects: ["<projectKey>"],
+  severities: ["HIGH", "BLOCKER"],
+  issueStatuses: ["OPEN"]
+)
+mcp__sonarqube__search_security_hotspots(projectKey: "<projectKey>")
+```
+
+If no SonarQube project exists, skip. Do NOT create one or run sonar-scanner
+here — that's a separate setup step the user does ahead of time.
+
+#### Step 3: Local SAST CLIs
+
+Detect project language from file extensions, then run the applicable tools:
+
+**TypeScript/JavaScript projects** (has `package.json` or `tsconfig.json`):
+```bash
+npx biome lint --reporter=json <project-root> 2>/dev/null > /tmp/sast-biome.json
+npx oxlint <project-root> 2>/dev/null > /tmp/sast-oxlint.txt
+```
+
+**Python projects** (has `pyproject.toml`, `setup.py`, or `requirements.txt`):
+```bash
+ruff check --output-format=json <project-root> 2>/dev/null > /tmp/sast-ruff.json
+```
+
+**All projects** (secrets scan):
+```bash
+gitleaks detect --source <project-root> --no-git --report-format json 2>/dev/null > /tmp/sast-gitleaks.json
+```
+
+If a tool is not installed or fails, skip it and note in synthesis.
+
+#### Step 4: Assemble SAST summary
+
+Collect all results into a single `$SAST_SUMMARY` string. Format:
+
+```markdown
+## SAST Pre-Scan Results
+
+### Semgrep (N findings)
+- [severity] rule-id: message (file:line)
+...
+
+### SonarQube (N HIGH/BLOCKER issues, M security hotspots)
+- [BLOCKER] S2189: 'stopped' is not modified in this loop (file:line)
+- [CRITICAL] S3776: Cognitive Complexity 120 exceeds 15 (file:line)
+...
+
+### Local Tools
+- biome: N issues
+- oxlint: N issues
+- ruff: N issues
+- gitleaks: N secrets detected (CRITICAL — block deploy)
+```
+
+Truncate to ~5000 chars max — keep HIGH/BLOCKER/CRITICAL findings, drop
+INFO/LOW. This summary is injected into every lens prompt in Phase 2.
+
+If ALL SAST tools were unavailable or returned zero findings, note
+"SAST pre-scan: no tools available or zero findings" and proceed — LLM
+reviews still run regardless.
 
 ### Phase 2: Fan-Out (12 reviews total)
 
@@ -95,10 +194,12 @@ Spawn the `review-lens` agent (`subagent_type: "review-lens"`) for each lens.
 All 7 can run simultaneously — Sonnet subagents have no concurrency limit.
 
 Each agent:
-1. Receives the lens name and the atomic skill's review instructions in the prompt
+1. Receives the lens name, the atomic skill's review instructions, AND the
+   `$SAST_SUMMARY` from Phase 1.5 in the prompt
 2. Has full codebase access via Claude tools
 3. Uses standardized severity classification and output format
-4. Returns findings as text in its response — does NOT write to DB
+4. Cross-references SAST findings — confirms, disputes, or expands on them
+5. Returns findings as text in its response — does NOT write to DB
 
 **DB writes are the main thread's job.** When each subagent returns, the
 main thread extracts the findings from the agent's response and writes
@@ -119,11 +220,14 @@ Launch exactly **3** Codex processes for: `security-review`, `refactor-review`,
 
 Each Codex exec:
 1. Receives a review prompt assembled from the atomic skill's instructions
+   AND the `$SAST_SUMMARY` from Phase 1.5
 2. Runs with `--sandbox read-only --ephemeral` and relevant source directories
    via `--add-dir`
 3. Pipes output to a temp file, then stores in DB:
    ```bash
-   $GTIMEOUT 120 "$CODEX" exec --skip-git-repo-check ... 2>/dev/null > /tmp/lens-codex-{lens}.md
+   $GTIMEOUT 120 "$CODEX" exec --ephemeral --sandbox read-only --skip-git-repo-check \
+     -C <project-root> --add-dir <relevant-dir-1> --add-dir <relevant-dir-2> \
+     -o /tmp/lens-codex-{lens}.md "LENS_PROMPT" 2>/dev/null
    source artifacts/db.sh && db_upsert '{lens}' 'findings' 'codex' "$(cat /tmp/lens-codex-{lens}.md)" && rm /tmp/lens-codex-{lens}.md
    ```
 
@@ -137,9 +241,9 @@ Launch exactly **2** Gemini processes for: `counter-review`, `drift-review`.
 Both fit within the 2-slot limit — no queuing needed.
 
 Each Gemini invocation:
-1. Receives a prompt file containing: the atomic skill's review instructions
-   plus relevant code context via `@path/to/file` references (use the file
-   list from Phase 1, max ~10 files per invocation)
+1. Receives a prompt file containing: the atomic skill's review instructions,
+   the `$SAST_SUMMARY` from Phase 1.5, plus relevant code context via
+   `@path/to/file` references (use the file list from Phase 1, max ~10 files)
 2. Uses `codebase_investigator` sub-agent
 3. Runs with `--agent codebase_investigator`, `$GTIMEOUT 60`, and `2>/dev/null`
 4. Pipes output to a temp file, then stores in DB as label `gemini`:
@@ -148,10 +252,19 @@ Each Gemini invocation:
    source artifacts/db.sh && db_upsert '{lens}' 'findings' 'gemini' "$(cat /tmp/lens-gemini-{lens}.md)" && rm /tmp/lens-gemini-{lens}.md
    ```
 
-If Gemini is unavailable, skip all Gemini reviews and note it in synthesis.
+If Gemini is unavailable or fails (timeout, empty output), **retry each
+failed lens with Copilot** using the `/copilot` skill. Use the same prompt
+and context, but adapt invocation syntax:
+```bash
+$GTIMEOUT 60 "$COPILOT" --allow-all-tools --no-ask-user --no-color --disable-builtin-mcps --add-dir <project-root> -s \
+  -p "LENS_PROMPT" 2>/dev/null > /tmp/lens-copilot-{lens}.md
+source artifacts/db.sh && db_upsert '{lens}' 'findings' 'copilot' "$(cat /tmp/lens-copilot-{lens}.md)" && rm /tmp/lens-copilot-{lens}.md
+```
+Store as label `copilot` — it counts the same as `gemini` for confidence
+scoring. If both Gemini and Copilot fail, skip and note it in synthesis.
 
 **Steps 2a, 2b, and 2c can all launch simultaneously** — there is no
-queuing needed since counts are within limits (7 Sonnet, 3 Codex, 2 Gemini).
+queuing needed since counts are within limits (7 Sonnet, 3 Codex, 2 Gemini/Copilot).
 
 ---
 
@@ -224,8 +337,13 @@ single-lens finding.
 ## Summary
 - Total findings: N (after dedup)
 - By confidence: HIGH: X, MEDIUM: Y
+- SAST pre-scan: Semgrep (N), SonarQube (N), local tools (N) — or "skipped"
 - Reviews completed: 12 (7 Sonnet + 3 Codex + 2 Gemini), note any failures
 - Multi-model lenses: security, refactor, completeness (Codex), counter, drift (Gemini)
+
+## SAST Findings (Pre-Scan)
+[BLOCKER/CRITICAL findings from static analysis tools — these are machine-
+verified, not LLM opinion. Gitleaks secrets findings are always top priority.]
 
 ## Cross-Lens Patterns
 [Patterns that span multiple review lenses — highest priority items]

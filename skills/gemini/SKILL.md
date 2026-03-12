@@ -210,13 +210,17 @@ validation reliable.
 
 ## Fallback Behavior
 
+**Copilot is Gemini's primary fallback.** When Gemini fails for any reason,
+retry with Copilot (`/copilot`) before falling back to WebSearch or skipping.
+Copilot shares the same 2-slot concurrency limit and timeout patterns.
+
 | Failure Mode | Fallback |
 |---|---|
-| CLI not installed | Claude WebSearch for research; skip for review |
-| Timeout (exit 130) | Retry once with 180s; then fall back to WebSearch |
-| Auth failure (exit 41) | Skip and note "Gemini auth failed" |
-| Rate limit (HTTP 429) | Claude WebSearch for the current task |
-| Capacity exhausted | Claude WebSearch for the current task |
+| CLI not installed | Try Copilot (`/copilot`); then Claude WebSearch for research, skip for review |
+| Timeout (exit 130) | Retry once with 180s; if still fails, try Copilot; then WebSearch |
+| Auth failure (exit 41) | Try Copilot; then skip and note "Gemini+Copilot unavailable" |
+| Rate limit (HTTP 429) | Try Copilot; then Claude WebSearch |
+| Capacity exhausted | Try Copilot; then Claude WebSearch |
 
 ## Examples
 
