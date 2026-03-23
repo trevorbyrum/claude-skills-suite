@@ -61,7 +61,7 @@ Launch all 4 tracks simultaneously:
   "Reasoning" sub-questions. Full MCP connector access. Cite every claim.
 - **Track B — Sonnet Connector Sweep** (7-10 subagents): One per MCP connector
   (Consensus, Scholar Gateway, PubMed, Synapse, Clinical Trials, Context7,
-  GitHub, MS Learn, Hugging Face, WebSearch). Uses `research-connector` agent
+  GitHub, MS Learn, HuggingFace, WebSearch). Uses `research-connector` agent
   with multi-query protocol (3-5 queries per topic). Each subagent writes to:
   `research-connector` / `findings` / `{NNN}D/{descriptive-name}` in the DB.
 - **Track C — Codex Technical Validation** (up to 4 workers): Workers 1-3 do
