@@ -1,432 +1,195 @@
 ---
 name: copilot
-description: Driver skill for Copilot CLI syntax, flags, and sandbox modes. Load this before spawning any Copilot call. Use when other skills need Copilot or user says "use Copilot".
+description: Driver skill for Copilot CLI. Provides copilot-exec.sh wrapper — call the script, not raw CLI. Load before any Copilot invocation.
 disable-model-invocation: true
 ---
 
 # Copilot CLI Driver
 
-Encode the exact Copilot CLI invocation for a given task type. This is a
-utility skill — it provides command templates that other skills compose into
-their workflows. It is not triggered directly by the user in most cases.
+**ALWAYS use the wrapper**: `bash skills/copilot/scripts/copilot-exec.sh <mode> [options] "PROMPT"`
 
-## PATH & Absolute Paths
+Never construct raw `copilot` commands — the wrapper handles path resolution,
+headless flags, timeout, MCP toggling, concurrency, and output validation.
 
-`run_in_background` and subagent Bash calls spawn non-interactive subshells
-that do NOT source `.zshrc`/`.zprofile`. Custom PATH entries are missing.
-
-**Always resolve the path dynamically:**
+## Wrapper Usage
 
 ```bash
-COPILOT=$(command -v copilot 2>/dev/null)
-test -x "$COPILOT" || COPILOT="$HOME/.local/bin/copilot"
-test -x "$COPILOT" || COPILOT="/opt/homebrew/bin/copilot"
-test -x "$COPILOT" || { echo "Copilot CLI unavailable — skipping"; exit 0; }
+bash skills/copilot/scripts/copilot-exec.sh <mode> [options] "PROMPT"
+bash skills/copilot/scripts/copilot-exec.sh <mode> [options] --stdin /path/to/prompt.md
 ```
 
-Use `"$COPILOT"` in every invocation. Do not use bare `copilot`.
+### Modes
 
-## Concurrency Limit (MANDATORY)
+| Mode | Behavior | Default Timeout | Use For |
+|------|----------|-----------------|---------|
+| `review` | Read-only, MCP disabled | 120s | Code review, analysis, security audit |
+| `generate` | Autopilot + file writes, MCP disabled | 180s | Code generation, implementation |
+| `full-access` | Autopilot + GitHub MCP enabled | 300s | Tasks needing GitHub context (rare) |
 
-Copilot CLI consumes **premium requests** from your GitHub Copilot quota on
-every invocation. Limit simultaneous processes to **2** to avoid quota
-exhaustion and API rate limits. This limit is set in `general.md` and applies
-to ALL skills. Queue excess tasks and launch as slots free up — identical to
-the Gemini 2-slot pattern in `/gemini`.
+### Options
 
-Track active sessions via a PID file:
+| Flag | Description |
+|------|-------------|
+| `--add-dir DIR` | Add directory to allowed access list (can repeat) |
+| `--output FILE` | Write response text to file |
+| `--timeout SECS` | Override default timeout |
+| `--stdin FILE` | Read prompt from file instead of positional arg |
+| `--model MODEL` | Override model (e.g. `gpt-5.4`, `claude-sonnet-4.6`) |
+| `--reasoning LEVEL` | Reasoning effort: `low`, `medium`, `high`, `xhigh` |
+| `--max-continues N` | Cap autopilot continuations (default: 5) |
+| `--json` | Use JSONL output format |
+| `--with-mcp` | Keep built-in GitHub MCP server enabled |
+| `--skip-concurrency` | Skip PID-based concurrency tracking |
 
-```bash
-PID_FILE=/tmp/copilot-slots.pid
+### Exit Codes
 
-# Prune dead entries
-if [ -f "$PID_FILE" ]; then
-  while IFS= read -r pid; do
-    ps -p "$pid" >/dev/null 2>&1 && echo "$pid"
-  done < "$PID_FILE" > "${PID_FILE}.tmp"
-  mv "${PID_FILE}.tmp" "$PID_FILE"
-fi
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | Copilot unavailable or config error |
+| 2 | All 2 concurrency slots occupied (after retries) |
+| 3 | Invalid arguments |
+| 4 | Empty or too-small response (likely failed) |
+| 124 | Timeout (from gtimeout) |
 
-# Check slot availability
-ACTIVE=$(wc -l < "$PID_FILE" 2>/dev/null | tr -d ' ' || echo 0)
-if [ "${ACTIVE:-0}" -ge 2 ]; then
-  echo "All 2 Copilot slots occupied — queuing"
-  # Wait for a slot to free up, or skip
-fi
-```
+## What the Wrapper Handles
 
-After launching a background call, append its PID:
-```bash
-echo $! >> /tmp/copilot-slots.pid
-```
+1. **Path resolution**: Finds Copilot binary across `command -v`, Homebrew, user-local, system
+2. **Headless flags**: Adds `--allow-all-tools --no-ask-user --no-color -s` on every call
+3. **MCP toggling**: Disables built-in GitHub MCP by default (saves 3-10s); enable with `--with-mcp`
+4. **Autopilot**: Adds `--autopilot --max-autopilot-continues 5` for generate/full-access modes
+5. **Timeout**: `$GTIMEOUT` wrapping (120s review, 180s generate, 300s full-access)
+6. **Concurrency**: Max 2 via PID file + mkdir-based atomic lock (race-safe)
+7. **Output validation**: Rejects suspiciously small responses (10+ chars text, 50+ chars JSON)
+8. **Rate limit detection**: Warns on 429/quota errors in stderr
+9. **Slot release**: Explicit cleanup via trap on exit
 
-## Availability Check
+## Examples
 
-Before any invocation, verify the CLI is installed:
-
-```bash
-COPILOT=$(command -v copilot 2>/dev/null)
-test -x "$COPILOT" || COPILOT="$HOME/.local/bin/copilot"
-test -x "$COPILOT" || COPILOT="/opt/homebrew/bin/copilot"
-test -x "$COPILOT" || { echo "Copilot CLI not installed"; exit 1; }
-```
-
-If unavailable:
-- **Code tasks**: fall back to Codex (`/codex`) or Claude directly.
-- **Review tasks**: skip and note "Copilot unavailable" in output.
-
-## Timeout Binary (MANDATORY)
-
-macOS ships NO `timeout` command. The alias only works in interactive shells —
-subagents, `run_in_background`, and bare bash subshells do NOT have it.
-
-**Always use the absolute path to GNU coreutils `gtimeout`:**
+### Code Review (most common)
 
 ```bash
-GTIMEOUT="/opt/homebrew/bin/gtimeout"
-test -x "$GTIMEOUT" || { echo "gtimeout not installed (brew install coreutils)"; exit 1; }
-```
-
-Every template below uses `$GTIMEOUT`. Do not use bare `timeout`.
-
-## Non-Interactive (Headless) Mode
-
-Copilot CLI enters headless mode via `-p/--prompt`. The process exits after
-the task completes — no interactive session is opened.
-
-**Baseline flags for unattended headless calls:**
-
-| Flag | Purpose |
-|---|---|
-| `-p "PROMPT"` | The prompt text — this is the headless trigger |
-| `--allow-all-tools` | Recommended when the task may need tools; avoids permission prompts |
-| `--no-ask-user` | Recommended when execution must not pause on a question |
-| `--no-color` | Strips ANSI escape codes from the response body |
-| `-s` / `--silent` | Outputs only the agent response; suppresses stats/metadata |
-
-```bash
-$GTIMEOUT 120 "$COPILOT" \
-  --allow-all-tools \
-  --no-ask-user \
-  --no-color \
-  -s \
-  -p "PROMPT" 2>/dev/null
-```
-
-Simple text-only prompts can complete without `--allow-all-tools` or
-`--no-ask-user`, but that is brittle. If the agent decides to use a tool or ask
-a question, the run can stall or fail. Use both flags for unattended tasks.
-
-**Never use `--yolo` in automated contexts** — it also enables
-`--allow-all-paths` and `--allow-all-urls`, which are too permissive for
-scripted calls. Use `--allow-all-tools` with explicit `--add-dir` instead.
-
-## Task-Type Templates
-
-**Every template includes `--allow-all-tools --no-ask-user --no-color -s`**
-to prevent interactive pauses and produce clean output.
-
-### Read-Only Analysis / Review
-
-No file writes needed. Disable the built-in GitHub MCP server for local-only
-tasks to eliminate 3-10s of startup latency.
-
-```bash
-RESULT=$($GTIMEOUT 120 "$COPILOT" \
-  --allow-all-tools \
-  --no-ask-user \
-  --no-color \
-  --disable-builtin-mcps \
+bash skills/copilot/scripts/copilot-exec.sh review \
   --add-dir /path/to/project \
-  -s \
-  -p "Review /path/to/project for security issues, focusing on input validation and auth. Be specific with file and line references." 2>/dev/null)
-echo "$RESULT" > OUTPUT_FILE
+  --output /tmp/copilot-review.md \
+  "Review /path/to/project for security issues. Focus on input validation and auth."
 ```
 
-### Code Generation / File Writes
-
-When Copilot needs to write files outside the current working directory, add
-the target directory explicitly and use a longer timeout to account for
-multi-step work.
+### Code Generation
 
 ```bash
-$GTIMEOUT 180 "$COPILOT" \
-  --allow-all-tools \
-  --no-ask-user \
-  --no-color \
+bash skills/copilot/scripts/copilot-exec.sh generate \
   --add-dir /path/to/project \
-  -s \
-  -p "Add input validation to all API route handlers in /path/to/project" 2>/dev/null > OUTPUT_FILE
+  --output /tmp/copilot-gen.md \
+  "Add input validation to all API route handlers in /path/to/project"
 ```
 
-### Autopilot (Multi-Step Tasks)
-
-For complex tasks that require the agent to continue autonomously across
-multiple turns. Always cap with `--max-autopilot-continues`.
+### Long Prompt via stdin
 
 ```bash
-$GTIMEOUT 300 "$COPILOT" \
-  --autopilot \
-  --max-autopilot-continues 5 \
-  --allow-all-tools \
-  --no-ask-user \
-  --no-color \
+bash skills/copilot/scripts/copilot-exec.sh review \
   --add-dir /path/to/project \
-  -s \
-  -p "Implement all TODO items in /path/to/project/src" 2>/dev/null > OUTPUT_FILE
+  --output /tmp/copilot-review.md \
+  --stdin /tmp/review-prompt.md
 ```
-
-Cap `--max-autopilot-continues` at 3–5. Without it, autopilot runs
-indefinitely and the only stop is `$GTIMEOUT`.
-
-### JSON Output (Structured)
-
-`--output-format json` produces JSONL — one JSON object per line. Parse
-line-by-line, not as a single document.
-
-```bash
-$GTIMEOUT 120 "$COPILOT" \
-  --allow-all-tools \
-  --no-ask-user \
-  --no-color \
-  --disable-builtin-mcps \
-  --output-format json \
-  -p "PROMPT" 2>/dev/null > /tmp/copilot-out.jsonl
-
-# Extract final assistant message content
-jq -r 'select(.type=="assistant.message") | .data.content // empty' \
-  /tmp/copilot-out.jsonl | tail -1 > OUTPUT_FILE
-```
-
-Validate the JSONL schema on first use — field names may vary by CLI version.
-On 1.0.4, the last line is a `result` event, not the final assistant message,
-so `tail -1` alone is not a safe extractor.
 
 ### With Specific Model
 
 ```bash
-$GTIMEOUT 120 "$COPILOT" \
+bash skills/copilot/scripts/copilot-exec.sh review \
+  --add-dir /path/to/project \
   --model gpt-5.4 \
-  --allow-all-tools \
-  --no-ask-user \
-  --no-color \
-  --disable-builtin-mcps \
-  -s \
-  -p "PROMPT" 2>/dev/null > OUTPUT_FILE
+  --output /tmp/copilot-review.md \
+  "Review for architectural issues."
 ```
 
-**Model reference:**
+### High Reasoning
+
+```bash
+bash skills/copilot/scripts/copilot-exec.sh review \
+  --add-dir /path/to/project \
+  --reasoning high \
+  --output /tmp/copilot-analysis.md \
+  "Deep security analysis of the authentication flow."
+```
+
+### Background with Concurrency (meta-review pattern)
+
+```bash
+bash skills/copilot/scripts/copilot-exec.sh review \
+  --add-dir /path/to/project \
+  --output /tmp/copilot-security.md \
+  --stdin /tmp/security-prompt.md &
+COPILOT_PID=$!
+# ... launch 1 more (max 2 total) ...
+wait $COPILOT_PID
+```
+
+### JSONL Output
+
+```bash
+bash skills/copilot/scripts/copilot-exec.sh review \
+  --add-dir /path/to/project \
+  --json \
+  --output /tmp/copilot-out.jsonl \
+  "Review for code quality issues."
+
+# Extract final assistant message
+jq -r 'select(.type=="assistant.message") | .data.content // empty' \
+  /tmp/copilot-out.jsonl | tail -1
+```
+
+## Model Selection
+
+Do not assume a fixed default model — the CLI auto-routes per task. Pin
+`--model` when model choice matters.
 
 | Model | Best For |
 |---|---|
-| `claude-sonnet-4.6` | Balanced quality and speed when you want to pin a Claude model |
+| `claude-sonnet-4.6` | Balanced quality and speed (Claude) |
 | `claude-opus-4.6` | Highest-quality reasoning, slower |
 | `claude-haiku-4.5` | Fast, cheap, simple tasks |
 | `gpt-5.4` | Codex-class tasks, structured output |
 | `gpt-5.1-codex` | Code generation and review |
 | `gemini-3-pro-preview` | Large context, web research |
 
-Do not assume a fixed default model. On 2026-03-13, a simple unpinned prompt
-auto-routed to `claude-haiku-4.5` on this machine. Pin `--model` when the
-output profile must be deterministic.
+## Concurrency Limit (MANDATORY)
 
-### High Reasoning
-
-For hard analysis tasks that benefit from extended thinking:
-
-```bash
-$GTIMEOUT 180 "$COPILOT" \
-  --reasoning-effort high \
-  --allow-all-tools \
-  --no-ask-user \
-  --no-color \
-  --disable-builtin-mcps \
-  -s \
-  -p "PROMPT" 2>/dev/null > OUTPUT_FILE
-```
-
-Reasoning levels: `low`, `medium`, `high`, `xhigh`. Default is unset (model
-decides). Use `high` for architectural analysis or security reviews. Use
-`xhigh` sparingly — significantly increases latency and quota cost.
-
-### Long Prompt via File
-
-When the prompt is too long for a shell argument, use command substitution:
-
-```bash
-PROMPT=$(cat /path/to/prompt.md)
-$GTIMEOUT 180 "$COPILOT" \
-  --allow-all-tools \
-  --no-ask-user \
-  --no-color \
-  --disable-builtin-mcps \
-  -s \
-  -p "$PROMPT" 2>/dev/null > OUTPUT_FILE
-```
-
-Avoid here-docs and pipes — Copilot's `-p` flag requires an argument string,
-not stdin. Use `$(cat file)` subshell expansion to stay safe.
-
-### With Additional Directories
-
-When the task needs access to shared libraries or configs outside the project:
-
-```bash
-$GTIMEOUT 120 "$COPILOT" \
-  --allow-all-tools \
-  --no-ask-user \
-  --no-color \
-  --add-dir /path/to/project \
-  --add-dir /shared/libs \
-  -s \
-  -p "Check for API contract mismatches between /path/to/project and /shared/libs" 2>/dev/null > OUTPUT_FILE
-```
-
-## Output Validation (MANDATORY)
-
-With `-s/--silent`, Copilot outputs only the agent response text.
-
-1. Check non-empty: `[ -s OUTPUT_FILE ]`
-2. Check character count: `wc -c < OUTPUT_FILE` — expect ≥ 100 chars for a real response
-3. An output with < 20 characters is likely a failure, timeout, or empty response
-
-```bash
-CHARS=$(wc -c < OUTPUT_FILE 2>/dev/null | tr -d ' ')
-if [ "${CHARS:-0}" -lt 50 ]; then
-  echo "Copilot output too small (${CHARS} chars) — likely failed"
-fi
-```
-
-## Critical Gotchas
-
-1. **`-p` IS `--prompt`** (unlike Codex where `-p` is `--profile`). `-p "text"`
-   is correct. This is the inverse of the Codex gotcha — stay alert when
-   switching between the two CLIs.
-
-2. **`--allow-all-tools` is the safe default for unattended tasks** — simple
-   text-only prompts can succeed without it, but any prompt that triggers tools
-   can stall on a permission request.
-
-3. **`--no-ask-user` prevents headless pauses** — simple prompts can finish
-   without it, but the `ask_user` tool can block unattended runs indefinitely.
-
-4. **`--autopilot` without `--max-autopilot-continues` runs indefinitely** —
-   always cap it (3–5 recommended). The only fallback is `$GTIMEOUT`.
-
-5. **JSON output is JSONL with mixed event types** — `--output-format json`
-   produces one JSON object per line, including reasoning deltas, assistant
-   messages, and a final `result` event. Filter for `assistant.message` when
-   extracting the answer.
-
-6. **No working-directory flag** — unlike Codex (`-C`), Copilot has no `-C`
-   or `--cd`. Use `--add-dir /path` for file access permissions and reference
-   the absolute path in your prompt.
-
-7. **`--yolo` is too broad for automation** — it enables `--allow-all-paths`
-   and `--allow-all-urls` in addition to `--allow-all-tools`. Use
-   `--allow-all-tools` with explicit `--add-dir` instead.
-
-8. **`2>/dev/null` is mandatory** — stderr contains progress spinners, MCP
-   startup logs, and ANSI sequences that corrupt output and inflate context.
-
-9. **`-s/--silent` and `--no-color` are both needed** — `-s` removes stats and
-   metadata headers; `--no-color` removes ANSI escape codes from the response
-   body. One without the other still produces garbage in captured output.
-
-10. **Premium request quota** — every invocation consumes one premium request
-    from your GitHub Copilot quota. Batch tasks into a single prompt where
-    possible rather than making many small calls.
-
-11. **MCP server startup adds latency** — the built-in GitHub MCP server loads
-    by default. Use `--disable-builtin-mcps` for all local-only tasks to
-    save 3-10s of startup overhead per call.
-
-12. **Exit codes**: `0` = success; non-zero = error. During debugging, remove
-    `2>/dev/null` temporarily to see the actual error message on stderr.
-13. **Do not assume a fixed default model** — the CLI can auto-route per task.
-    Pin `--model` when model choice matters.
-
-## Short Flag Reference
-
-| Short | Long | Purpose |
-|---|---|---|
-| `-h` | `--help` | Display help |
-| `-i` | `--interactive <prompt>` | Start interactive session with initial prompt |
-| `-p` | `--prompt <text>` | Non-interactive headless prompt (**NOT profile**) |
-| `-s` | `--silent` | Output only agent response (no stats) |
-| — | `--allow-all` | Enable all permissions (alias: `--yolo`) |
-| — | `--allow-all-paths` | Allow access to any file path |
-| — | `--allow-all-tools` | Allow all tools without confirmation |
-| — | `--allow-all-urls` | Allow all URL access |
-| — | `--add-dir <dir>` | Add directory to allowed access list |
-| — | `--autopilot` | Enable autonomous continuation |
-| — | `--available-tools[=tools...]` | Restrict available tools to this set |
-| — | `--disable-builtin-mcps` | Disable GitHub MCP server (reduces latency) |
-| — | `--disable-mcp-server <name>` | Disable a specific MCP server by name |
-| — | `--max-autopilot-continues <n>` | Cap autopilot continuation count |
-| — | `--model <model>` | Override model |
-| — | `--no-ask-user` | Disable the ask_user tool |
-| — | `--no-color` | Strip ANSI codes from output |
-| — | `--no-custom-instructions` | Skip loading instruction files |
-| — | `--output-format <fmt>` | `text` (default) or `json` (JSONL) |
-| — | `--reasoning-effort <lvl>` | `low`, `medium`, `high`, `xhigh` |
-| — | `--resume[=id]` | Resume a previous session by ID |
-| — | `--yolo` | All permissions (tools + paths + URLs) |
+Max **2** simultaneous Copilot processes. Every invocation consumes one premium
+request from GitHub Copilot quota. The wrapper enforces this via PID file
+(`/tmp/copilot-slots.pid`) with mkdir-based atomic locking.
 
 ## Fallback Behavior
 
-| Failure Mode | Action |
-|---|---|
-| CLI not installed | Fall back to Codex (`/codex`) or Claude directly |
-| Timeout (killed by `$GTIMEOUT`) | Retry once with 2× timeout; then skip |
-| Quota exhausted (429 / hang) | Skip and note "Copilot quota exhausted" |
-| All 2 slots occupied | Queue and retry after 30s; skip after 3 attempts |
-| MCP server hang | Retry with `--disable-builtin-mcps` |
-| Empty output (< 50 chars) | Retry once; then skip |
+**Codex is Copilot's primary fallback.** Copilot itself is Gemini's fallback —
+if both Gemini and Copilot fail, fall back to WebSearch (research) or skip (review).
 
-## Examples
+| Failure | Exit Code | Fallback |
+|---------|-----------|----------|
+| CLI not installed | 1 | Codex; then Claude direct |
+| Timeout | 124 | Retry once with `--timeout 240`; then Codex |
+| Quota exhausted | 0 or 4 | Skip and note "Copilot quota exhausted" |
+| Empty output | 4 | Retry once; then skip |
+| All slots full | 2 | Wait and retry; then skip |
+| MCP server hang | — | Retry with `--skip-concurrency` (wrapper disables MCP by default) |
 
-```
-Skill (review): Needs Copilot to review a project for code quality issues.
---> RESULT=$($GTIMEOUT 120 "$COPILOT" \
-      --allow-all-tools \
-      --no-ask-user \
-      --no-color \
-      --disable-builtin-mcps \
-      --add-dir /path/to/project \
-      -s \
-      -p "Review /path/to/project for code quality issues: naming, duplication, missing error handling. Report with file and line references." 2>/dev/null)
-    echo "$RESULT" > /tmp/copilot-review.md
-```
+## Critical Gotchas
 
-```
-Skill (meta-review): Firing Copilot alongside Codex and Gemini in parallel.
---> $GTIMEOUT 120 "$COPILOT" \
-      --allow-all-tools \
-      --no-ask-user \
-      --no-color \
-      --disable-builtin-mcps \
-      --add-dir /path/to/project \
-      -s \
-      -p "$(cat /tmp/review-prompt.md)" 2>/dev/null > /tmp/copilot-review-output.md &
-    echo $! >> /tmp/copilot-slots.pid
-    COPILOT_PID=$!
-    # ... launch other reviews ...
-    wait $COPILOT_PID
-```
+1. **Always use the wrapper** — never construct raw `copilot` commands
+2. **`-p` IS `--prompt`** — unlike Codex where `-p` is `--profile`
+3. **No `--cd` or `--workdir` flag** — use `--add-dir` for file access and reference absolute paths in prompt
+4. **`--autopilot` without `--max-continues` runs indefinitely** — wrapper caps at 5
+5. **JSON output is JSONL** — one JSON object per line, mixed event types. Filter for `assistant.message`
+6. **Premium requests** — every call costs one. Batch tasks into single prompts where possible
+7. **MCP startup adds 3-10s** — wrapper disables by default; use `--with-mcp` for GitHub-context tasks
+8. **`2>/dev/null` is mandatory** — stderr has spinners, MCP logs, ANSI noise. Wrapper handles this
+9. **Model auto-routing** — unpinned prompts may route to unexpected models. Pin with `--model` when it matters
 
-```
-Skill (generation): Implementing a feature with autopilot and a turn cap.
---> $GTIMEOUT 300 "$COPILOT" \
-      --autopilot \
-      --max-autopilot-continues 5 \
-      --allow-all-tools \
-      --no-ask-user \
-      --no-color \
-      --add-dir /path/to/project \
-      -s \
-      -p "Implement JWT refresh token support in /path/to/project/src/auth.ts following the existing pattern." 2>/dev/null > /tmp/copilot-gen.md
-```
+## Consuming Skills
+
+Skills that use Copilot include wrapper commands as fenced code blocks — this is
+calling the API, not violating the driver boundary. The old "Load `/copilot` for
+invocation syntax" pattern is replaced with direct wrapper calls.
 
 ---
 

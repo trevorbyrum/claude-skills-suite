@@ -43,14 +43,15 @@ execution.
    retry with Copilot — load `/copilot` for invocation syntax. Same prompt,
    same output file. If both fail, skip and note it.
 
-3. **Technical feasibility check.** Load `/codex` for invocation syntax.
-   Key params: `--sandbox read-only`, `--ephemeral`, `--cd /tmp`, 120s timeout.
-   Prompt: `"Given this tech stack: [stack from context]. And this scope:
-   [scope summary]. Flag any technical risks: library maturity issues, known
-   scaling problems, integration pain points, or missing pieces. Be specific."`.
-   Output to `/tmp/feasibility-check.txt`.
-   Read the output and factor risks into the plan. If Codex is unavailable,
-   skip and note it.
+3. **Technical feasibility check.**
+   ```bash
+   bash skills/codex/scripts/codex-exec.sh review \
+     --cd /tmp \
+     --output /tmp/feasibility-check.txt \
+     "Given this tech stack: [stack from context]. And this scope: [scope summary]. Flag any technical risks: library maturity issues, known scaling problems, integration pain points, or missing pieces. Be specific."
+   ```
+   Read the output and factor risks into the plan. If the command fails
+   (exit 1 = Codex unavailable), skip and note it.
 
 4. **Define phases.** Break the project into 3-6 phases. Each phase should
    deliver something usable or testable — avoid phases that are purely
@@ -193,16 +194,13 @@ After the user approves the plan, offer to generate skeleton files:
 > "Plan approved. Want me to generate skeleton files (interfaces, types, module stubs) for the work units? This gives implementation a head start."
 
 If yes:
-1. Load `/codex` for invocation syntax. If Codex is unavailable, skip.
-2. If available, for each work unit that creates new files, dispatch a Codex
-   worker. Key params: `--sandbox workspace-write`, `--ephemeral`,
-   `--cd <project-root>`, 180s timeout.
-   Prompt: `"Generate skeleton files for this work unit. Create the file
-   structure with interfaces, type definitions, function signatures (with TODO
-   bodies), and module exports. Do NOT implement business logic — just the
-   structure. Work unit: [DESCRIPTION] Tech stack: [FROM PROJECT CONTEXT]
-   Files to create: [FROM PLAN]"`.
-3. If Codex is unavailable, skip — this is a convenience step, not required.
+1. For each work unit that creates new files, dispatch a Codex worker:
+   ```bash
+   bash skills/codex/scripts/codex-exec.sh generate \
+     --cd <project-root> \
+     "Generate skeleton files for this work unit. Create the file structure with interfaces, type definitions, function signatures (with TODO bodies), and module exports. Do NOT implement business logic — just the structure. Work unit: [DESCRIPTION] Tech stack: [FROM PROJECT CONTEXT] Files to create: [FROM PLAN]"
+   ```
+2. If the command fails (exit 1 = Codex unavailable), skip — this is a convenience step, not required.
 
 ## Examples
 

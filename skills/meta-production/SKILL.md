@@ -94,15 +94,18 @@ Before scanning code, research production best practices specific to this
 project's tech stack. Read `project-context.md` to identify the stack and
 determine the service criticality tier.
 
-Load `/gemini` for invocation syntax. Key params: 120s timeout, prompt:
-`"Research production readiness best practices for a [STACK] application.
+```bash
+bash skills/gemini/scripts/gemini-exec.sh research \
+  --output /tmp/prr-stack-research.md \
+  "Research production readiness best practices for a [STACK] application.
 Cover: deployment patterns (blue/green, canary, progressive delivery),
 observability (SLI-based alerting, OpenTelemetry, cost-aware),
 security hardening (supply chain, runtime security, network policies),
 SLO/SLI definition, chaos engineering readiness, capacity planning,
 incident response maturity, and common production antipatterns.
 Be specific to this stack — not generic advice.
-Project context: [first 3 sections of project-context.md]"`.
+Project context: [first 3 sections of project-context.md]"
+```
 Replace `[STACK]` with the actual tech stack from project-context.md.
 Output to `/tmp/prr-stack-research.md`.
 
@@ -146,13 +149,16 @@ Each review-lens subagent stores its output in DB as `db_upsert '{lens}' 'findin
 Fan out 5 Codex instances — one per production dimension (Dims 8-12).
 Uses all 5 available Codex slots.
 
-Load `/codex` for invocation syntax. Key params for all 5 workers:
-`--sandbox read-only`, `--ephemeral`, `--cd /path/to/project`, 120s timeout.
-
 Read `references/production-scan-prompts.md` for prompts for Dims 8-10.
 Read `references/reliability-capacity-prompts.md` for prompts for Dims 11-12.
 
-Launch all 5 in parallel. Output each to `/tmp/prr-{dimension}.md`.
+Launch all 5 in parallel via the Codex wrapper. Each invocation:
+```bash
+bash skills/codex/scripts/codex-exec.sh review \
+  --cd /path/to/project \
+  --output /tmp/prr-{dimension}.md \
+  "DIMENSION_PROMPT"
+```
 
 **Workers 1-3** — Observability (8), Deployment (9), Operations (10):
 prompt from `references/production-scan-prompts.md`.
@@ -179,13 +185,16 @@ Less depth but still covers the patterns via grep and file analysis.
 While Track A and B run, have Gemini cross-reference the stack research
 (Phase 1) against the project's actual implementation:
 
-Load `/gemini` for invocation syntax. Key params: 120s timeout, prompt:
-`"Compare these production best practices against the actual codebase.
+```bash
+bash skills/gemini/scripts/gemini-exec.sh review \
+  --output /tmp/prr-practices.md \
+  "Compare these production best practices against the actual codebase.
 For each practice, mark it as: IMPLEMENTED, PARTIALLY IMPLEMENTED, or MISSING.
 Cite specific files and lines.
 Best practices: $(cat /tmp/prr-stack-research.md)
-Focus on the top 20 most critical practices for this stack."`.
-Output to `/tmp/prr-practices.md`. Then store in DB:
+Focus on the top 20 most critical practices for this stack."
+```
+Then store in DB:
 ```bash
 source artifacts/db.sh
 db_upsert 'meta-production' 'scan' 'practices-audit' "$(cat /tmp/prr-practices.md)"

@@ -21,10 +21,11 @@ These rules apply to every skill in the suite. Every atomic SKILL.md must follow
    - If a skill needs more, queue excess and launch as slots free up. Do NOT launch all at once.
    - These limits come from `general.md` and override any per-skill instructions.
 
-6. **Driver skill boundary (MANDATORY)** — Any skill that dispatches Gemini, Codex, Copilot, Cursor, or Vibe must reference the corresponding driver skill instead of embedding CLI details locally.
-   - Consuming skills may specify task type, prompt template, output path, concurrency, and fallback behavior.
-   - Consuming skills must NOT inline CLI commands, flags, auth/path setup, timeout syntax, model-selection syntax, or gotcha lists for those agents.
-   - If invocation details change, update the driver skill only.
+6. **Driver skill boundary (MANDATORY)** — Any skill that dispatches Gemini, Codex, Copilot, Cursor, or Vibe must use the corresponding wrapper script for invocation. The wrapper IS the abstraction layer.
+   - **Codex**: Always invoke via `bash skills/codex/scripts/codex-exec.sh <mode> [options] "PROMPT"`. The wrapper handles path resolution, timeout (gtimeout), MCP server management, and concurrency tracking. Consuming skills include the wrapper invocation as a fenced code block — this is NOT "embedding CLI details," it's calling the API.
+   - **Gemini/Copilot/Cursor/Vibe**: Load the corresponding driver skill (`/gemini`, `/copilot`, `/cursor`, `/vibe`) for invocation syntax and path resolution.
+   - Consuming skills must NOT bypass wrapper scripts with raw CLI commands, duplicate path-resolution logic, or embed gotcha lists.
+   - If wrapper internals change, update the driver skill/wrapper only.
    - For Vibe, keep prompts narrowly scoped to named files/directories or a single work unit with explicit deliverables. Never ask it to scope the whole project first.
 
 7. **Homelab Tools memory sync (MANDATORY)** — Keep Qdrant memory current so home Claude stays informed across projects and sessions. Use `mcp__claude_ai_Homelab_Tools__memory_call` with `tool: 'store_memory'`.

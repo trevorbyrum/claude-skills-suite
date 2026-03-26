@@ -128,8 +128,11 @@ which fixes to implement. The user may also:
 
 #### Worker Pool Setup
 
-Check Codex availability — load `/codex` for the path discovery pattern.
-Note whether Codex is available or unavailable.
+Check Codex availability:
+```bash
+bash skills/codex/scripts/codex-exec.sh review --skip-concurrency --timeout 10 "Reply OK" > /dev/null 2>&1
+```
+Exit 0 = available, exit 1 = unavailable. Note the result.
 
 **Pool limits** (from `general.md`):
 - Codex: **5 concurrent** exec processes
@@ -154,9 +157,14 @@ The context package contains:
 
 For each approved fix unit, dispatch a worker:
 
-**Codex worker** — load `/codex` for invocation syntax. Key params:
-`--sandbox workspace-write`, `--ephemeral`, `--cd <project-root>`, 180s timeout.
-Prompt: `FIXER_PROMPT` (from `agents/fixer.md` with all placeholders filled).
+**Codex worker** — invoke via wrapper with the fixer prompt:
+```bash
+bash skills/codex/scripts/codex-exec.sh generate \
+  --cd <project-root> \
+  "FIXER_PROMPT"
+```
+Build `FIXER_PROMPT` from `agents/fixer.md` with all placeholders filled.
+For long prompts, write to a temp file and use `--stdin /tmp/fix-{ID}-prompt.md`.
 
 **Sonnet fallback:**
 Use `isolation: "worktree"` for parallel subagents. Each receives the same

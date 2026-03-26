@@ -99,16 +99,15 @@ picture of the system.
 
 After comparing docs to code, run a reverse check — find things in code that docs don't mention:
 
-1. Load `/codex` for invocation syntax. If Codex is unavailable, skip to step 4.
-2. If available, dispatch a Codex worker. Key params: `--sandbox read-only`,
-   `--ephemeral`, `--cd <project-root>`, 120s timeout.
-   Prompt: `"Scan this codebase for features, endpoints, configuration options,
-   and behaviors that are NOT documented in any .md file in the project root.
-   List each with file:line. Focus on: API endpoints without docs, env vars
-   without .env.example entries, CLI flags without README mention, and database
-   tables without schema docs."`.
-3. Add any undocumented findings to the drift report as "Code-ahead" items.
-4. If Codex is unavailable, skip this step — the standard doc-to-code comparison still runs.
+1. Run a Codex scan. If the command exits non-zero, skip to step 4.
+   ```bash
+   bash skills/codex/scripts/codex-exec.sh review \
+     --cd <project-root> \
+     --output /tmp/codex-drift-discovery.md \
+     "Scan this codebase for features, endpoints, configuration options, and behaviors that are NOT documented in any .md file in the project root. List each with file:line. Focus on: API endpoints without docs, env vars without .env.example entries, CLI flags without README mention, and database tables without schema docs."
+   ```
+2. Read `/tmp/codex-drift-discovery.md` and add any undocumented findings to the drift report as "Code-ahead" items.
+3. If the command failed (exit 1 = Codex unavailable, exit 124 = timeout), skip — the standard doc-to-code comparison still runs.
 
 ### 4. Status Accuracy Check
 

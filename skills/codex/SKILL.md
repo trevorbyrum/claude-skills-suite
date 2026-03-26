@@ -25,9 +25,13 @@ codex-exec.sh <mode> [options] --stdin /path/to/prompt.md
 
 | Mode | Sandbox | Default Timeout | Use Case |
 |------|---------|-----------------|----------|
-| `review` | read-only | 180s | Code review, analysis, lint |
-| `generate` | workspace-write | 180s | Code generation, file writes |
-| `full-access` | danger-full-access | 300s | Tasks needing network (rare) |
+| `review` | read-only | 300s (base) | Code review, analysis, lint |
+| `generate` | workspace-write | 300s (base) | Code generation, file writes |
+| `full-access` | danger-full-access | 600s (extended) | Tasks needing network (rare) |
+
+**Two-tier timeout**: base (300s) covers review and generate — gpt-5.4 reviews
+routinely take 2-4 minutes. Extended (600s) covers full-access tasks with network.
+Consuming skills should NOT override with shorter values — the defaults are tested.
 
 ### Options
 

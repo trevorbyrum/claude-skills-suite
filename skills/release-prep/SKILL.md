@@ -157,15 +157,15 @@ the commands but do NOT push. Tell the user to push when ready:
 
 Use Codex to generate a detailed changelog from git history:
 
-1. Load `/codex` for invocation syntax. If Codex is unavailable, skip to step 4.
-2. If available, dispatch a Codex worker. Key params: `--sandbox read-only`,
-   `--ephemeral`, `--cd <project-root>`, 120s timeout.
-   Prompt: `"Analyze the git log since the last release tag. For each commit,
-   categorize as: feat/fix/refactor/docs/chore. Group by category. Write a
-   user-facing changelog in Keep a Changelog format. Include PR numbers if
-   available. Summarize breaking changes separately."`.
-3. Use the Codex output as a draft, then refine based on cnotes.md entries and human context.
-4. If Codex is unavailable, generate the changelog manually from git log + cnotes.md.
+1. Dispatch a Codex worker to draft the changelog:
+   ```bash
+   bash skills/codex/scripts/codex-exec.sh review \
+     --cd <project-root> \
+     --output /tmp/codex-changelog-draft.md \
+     "Analyze the git log since the last release tag. For each commit, categorize as: feat/fix/refactor/docs/chore. Group by category. Write a user-facing changelog in Keep a Changelog format. Include PR numbers if available. Summarize breaking changes separately."
+   ```
+2. If the command succeeds, read `/tmp/codex-changelog-draft.md` and refine based on cnotes.md entries and human context.
+3. If the command fails (exit 1 = Codex unavailable), generate the changelog manually from git log + cnotes.md.
 
 ### User-Facing Release Notes (Gemini)
 

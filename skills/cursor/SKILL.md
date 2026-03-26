@@ -1,434 +1,193 @@
 ---
 name: cursor
-description: Driver skill for Cursor Agent CLI (headless) syntax, flags, and modes. Load this before spawning any headless Cursor call. Use when other skills need Cursor or user says "use Cursor".
+description: Driver skill for Cursor Agent CLI. Provides cursor-exec.sh wrapper — call the script, not raw CLI. Load before any Cursor invocation.
 disable-model-invocation: true
 ---
 
 # Cursor Agent CLI Driver
 
-Encode the exact Cursor Agent CLI invocation for a given task type. This is a
-utility skill — it provides command templates that other skills compose into
-their workflows. It is not triggered directly by the user in most cases.
+**ALWAYS use the wrapper**: `bash skills/cursor/scripts/cursor-exec.sh <mode> [options] "PROMPT"`
 
-## PATH & Absolute Paths
+Never construct raw `agent` commands — the wrapper handles path resolution,
+headless flags, timeout, concurrency, and output validation.
 
-`run_in_background` and subagent Bash calls spawn non-interactive subshells
-that do NOT source `.zshrc`/`.zprofile`. Custom PATH entries are missing.
-
-**Always resolve the path dynamically:**
+## Wrapper Usage
 
 ```bash
-AGENT=$(command -v agent 2>/dev/null)
-test -x "$AGENT" || AGENT="$HOME/.local/bin/agent"
-test -x "$AGENT" || AGENT="/usr/local/bin/agent"
-test -x "$AGENT" || { echo "Cursor Agent CLI unavailable — skipping"; }
+bash skills/cursor/scripts/cursor-exec.sh <mode> [options] "PROMPT"
+bash skills/cursor/scripts/cursor-exec.sh <mode> [options] --stdin /path/to/prompt.md
 ```
 
-Use `"$AGENT"` in every invocation. Do not use bare `agent`.
+### Modes
 
-## Timeout Binary
+| Mode | Behavior | Default Timeout | Use For |
+|------|----------|-----------------|---------|
+| `review` | `--mode ask` (analysis) | 120s | Code review, read-only analysis |
+| `generate` | `--force` (file writes) | 180s | Code generation, refactoring |
+| `plan` | `--mode plan` (planning) | 120s | Architecture planning, proposals |
 
-Use the same `$GTIMEOUT` pattern as the Gemini and Codex skills:
+### Options
 
-```bash
-GTIMEOUT="/opt/homebrew/bin/gtimeout"
-test -x "$GTIMEOUT" || GTIMEOUT="/opt/homebrew/bin/timeout"
-test -x "$GTIMEOUT" || { echo "gtimeout not installed (brew install coreutils)"; exit 1; }
-```
+| Flag | Description |
+|------|-------------|
+| `--workspace DIR` | Working directory |
+| `--output FILE` | Write response text to file |
+| `--timeout SECS` | Override default timeout |
+| `--stdin FILE` | Read prompt from file instead of positional arg |
+| `--model MODEL` | Override model (e.g. `sonnet-4.6-thinking`, `gpt-5.4-high`) |
+| `--worktree NAME` | Isolated git worktree for writes |
+| `--worktree-base REF` | Branch/ref to base worktree on |
+| `--json` | Use JSON output format (single object, not JSONL) |
+| `--with-mcp` | Auto-approve MCP servers |
+| `--skip-concurrency` | Skip PID-based concurrency tracking |
 
-Every template below uses `$GTIMEOUT`. Do not use bare `timeout`.
+### Exit Codes
 
-## Availability Check
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | Cursor Agent unavailable or not authenticated |
+| 2 | All 3 concurrency slots occupied (after retries) |
+| 3 | Invalid arguments |
+| 4 | Empty or too-small response, or JSON error result |
+| 124 | Timeout (from gtimeout) |
 
-Before any invocation, verify the CLI is installed and authenticated:
+## What the Wrapper Handles
 
-```bash
-"$AGENT" status 2>/dev/null | grep -q "Logged in" || {
-  echo "Cursor Agent not authenticated — run 'agent login'"
-  exit 1
-}
-```
+1. **Path resolution**: Finds `agent` binary across `command -v`, user-local, system
+2. **Headless flags**: Adds `-p --trust` on every call (prevents TUI and trust prompts)
+3. **Mode mapping**: `review` → `--mode ask`, `generate` → `--force`, `plan` → `--mode plan`
+4. **Timeout**: `$GTIMEOUT` wrapping (120s review/plan, 180s generate)
+5. **Concurrency**: Max 3 via PID file + mkdir-based atomic lock (race-safe)
+6. **Output validation**: Rejects small responses (10+ chars text, 50+ chars JSON); checks JSON `.is_error`
+7. **Slot release**: Explicit cleanup via trap on exit
 
-If unavailable, skip the Cursor portion of the workflow and note
-"Cursor Agent unavailable" in output.
+## Examples
 
-## Concurrency Limit (MANDATORY)
-
-Cursor Agent supports a maximum of **3** simultaneous headless processes.
-Exceeding this causes API rate limiting and degraded responses. Track active
-sessions via a PID file (same pattern as Codex/Gemini):
-
-```bash
-PID_FILE=/tmp/cursor-slots.pid
-
-# Prune dead entries
-if [ -f "$PID_FILE" ]; then
-  while IFS= read -r pid; do
-    ps -p "$pid" >/dev/null 2>&1 && echo "$pid"
-  done < "$PID_FILE" > "${PID_FILE}.tmp"
-  mv "${PID_FILE}.tmp" "$PID_FILE"
-fi
-
-# Check slot availability
-ACTIVE=$(wc -l < "$PID_FILE" 2>/dev/null || echo 0)
-if [ "$ACTIVE" -ge 3 ]; then
-  echo "All 3 Cursor Agent slots occupied — queuing"
-fi
-```
-
-After launching in the background, append its PID:
-```bash
-echo $! >> /tmp/cursor-slots.pid
-```
-
-## Headless Mode Essentials
-
-Cursor Agent headless mode requires `-p` (print) flag. Without it, the CLI
-enters interactive TUI mode which hangs in subshells.
-
-**Key flags for headless:**
-
-| Flag | Purpose |
-|---|---|
-| `-p, --print` | Non-interactive mode (REQUIRED for headless) |
-| `--trust` | Trust workspace without prompting (REQUIRED for headless) |
-| `-f, --force` / `--yolo` | Auto-approve command/tool execution; not a write barrier |
-| `--workspace <path>` | Set working directory |
-| `--model <id>` | Override model |
-| `--mode ask` | Q&A / analysis mode; do not assume read-only safety |
-| `--mode plan` | Planning mode; do not assume read-only safety |
-| `--output-format <fmt>` | `text` (default), `json`, `stream-json` |
-
-**Do not treat `--force` as a write barrier.** On the current CLI build,
-plain `-p` can still modify files, and `--mode ask` / `--mode plan` are not
-reliably read-only in practice. When the main worktree must stay untouched,
-run in an isolated worktree or disposable copy.
-
-To capture output in a file, redirect stdout: `> OUTPUT_FILE`.
-
-## Model Selection
-
-Current account has access to these models (use `agent models` to refresh):
-
-| ID | Notes |
-|---|---|
-| `auto` | Cursor routes to best available |
-| `opus-4.6-thinking` | Current default. Strongest reasoning. |
-| `sonnet-4.6-thinking` | Good balance of speed and quality |
-| `sonnet-4.6` | Fast, no extended thinking |
-| `gpt-5.4-high` | Strong alternative for code generation |
-| `gpt-5.4-medium` | Faster GPT option |
-| `gemini-3.1-pro` | Google's latest |
-
-### Routing by Task Type
-
-| Task | Model | Rationale |
-|---|---|---|
-| Deep review, architecture analysis | `opus-4.6-thinking` | Maximum reasoning |
-| Code generation, refactoring | `sonnet-4.6-thinking` or `gpt-5.4-high` | Good balance |
-| Quick lint, simple analysis | `sonnet-4.6` or `gpt-5.4-medium-fast` | Speed over depth |
-| Research with web grounding | `gemini-3.1-pro` | Native search |
-| Cost-sensitive batch work | `sonnet-4.6` | Lowest per-token |
-
-## Execution Modes
-
-### Agent Mode (default) — Full Tool Access
-
-The default mode. Agent can read files, write files, run shell commands, and
-use all configured MCP tools. Use `--force` to allow writes without
-confirmation.
+### Code Review (most common)
 
 ```bash
-$GTIMEOUT 120 "$AGENT" -p --trust --force --workspace /path/to/project \
-  "PROMPT" 2>/dev/null
-```
-
-### Ask Mode — Q&A / Analysis
-
-Use for analysis and understanding tasks. The CLI help describes this as
-read-only, but the current build has been observed to modify files anyway, so
-do not trust it as a safety boundary.
-
-```bash
-$GTIMEOUT 120 "$AGENT" -p --trust --mode ask --workspace /path/to/project \
-  "PROMPT" 2>/dev/null
-```
-
-### Plan Mode — Planning / Analysis
-
-Use when you want planning-oriented responses. The CLI help describes this as
-read-only, but the current build has been observed to modify files anyway, so
-do not treat it as a guaranteed dry run.
-
-```bash
-$GTIMEOUT 120 "$AGENT" -p --trust --mode plan --workspace /path/to/project \
-  "PROMPT" 2>/dev/null
-```
-
-## Task-Type Templates
-
-**Every template below includes `--trust`** — required for headless mode to
-avoid interactive workspace trust prompts.
-
-### Code Review (Analysis; isolate if repo must stay clean)
-
-```bash
-RESULT=$($GTIMEOUT 120 "$AGENT" -p --trust --mode ask --workspace /path/to/project \
-  "Review this codebase for security issues, focusing on input validation and auth." 2>/dev/null)
-echo "$RESULT" > OUTPUT_FILE
-```
-
-For git repos where analysis must not touch the main tree, prefer:
-
-```bash
-$GTIMEOUT 120 "$AGENT" -p --trust --mode ask -w review-pass \
+bash skills/cursor/scripts/cursor-exec.sh review \
   --workspace /path/to/project \
-  "Review this codebase for security issues, focusing on input validation and auth." \
-  2>/dev/null > OUTPUT_FILE
+  --output /tmp/cursor-review.md \
+  "Review for security issues. Focus on input validation and auth."
 ```
 
-### Code Generation (Write)
+### Code Generation
 
 ```bash
-$GTIMEOUT 120 "$AGENT" -p --trust --force --workspace /path/to/project \
-  "Add input validation to all API route handlers" 2>/dev/null
+bash skills/cursor/scripts/cursor-exec.sh generate \
+  --workspace /path/to/project \
+  --output /tmp/cursor-gen.md \
+  "Add input validation to all API route handlers."
 ```
 
-### Structured JSON Output
-
-Use `--output-format json` for machine-parseable results:
+### Generation in Isolated Worktree
 
 ```bash
-$GTIMEOUT 120 "$AGENT" -p --trust --mode ask --workspace /path/to/project \
-  --output-format json "Analyze the test coverage gaps" 2>/dev/null
+bash skills/cursor/scripts/cursor-exec.sh generate \
+  --workspace /path/to/project \
+  --worktree wu-3-auth \
+  --worktree-base main \
+  --model sonnet-4.6-thinking \
+  "Implement JWT refresh token rotation per project-plan.md WU-3."
 ```
 
-JSON output shape:
-```json
-{
-  "type": "result",
-  "subtype": "success",
-  "is_error": false,
-  "duration_ms": 3723,
-  "result": "...",
-  "session_id": "...",
-  "usage": { "inputTokens": 3, "outputTokens": 23, ... }
-}
-```
-
-Extract the result with: `jq -r '.result'`
-
-### Long Prompt via File
-
-For prompts too long for a shell argument, put the prompt in a file and
-reference it:
+### Long Prompt via stdin
 
 ```bash
-$GTIMEOUT 120 "$AGENT" -p --trust --mode ask --workspace /path/to/project \
-  "$(cat /path/to/prompt.md)" 2>/dev/null > OUTPUT_FILE
+bash skills/cursor/scripts/cursor-exec.sh review \
+  --workspace /path/to/project \
+  --output /tmp/cursor-review.md \
+  --stdin /tmp/review-prompt.md
 ```
 
 ### With Model Override
 
 ```bash
-$GTIMEOUT 120 "$AGENT" -p --trust --force --model sonnet-4.6-thinking \
-  --workspace /path/to/project "PROMPT" 2>/dev/null
+bash skills/cursor/scripts/cursor-exec.sh review \
+  --workspace /path/to/project \
+  --model sonnet-4.6 \
+  --output /tmp/cursor-quick.md \
+  "List all exported functions in src/api/ that lack input validation."
 ```
 
-### Parallel Execution (Background)
+### Background with Concurrency (meta-review pattern)
 
 ```bash
-$GTIMEOUT 120 "$AGENT" -p --trust --mode ask --workspace /path/to/project \
-  "$(cat /tmp/review-prompt.md)" 2>/dev/null > /tmp/cursor-review-output.md &
-echo $! >> /tmp/cursor-slots.pid
+bash skills/cursor/scripts/cursor-exec.sh review \
+  --workspace /path/to/project \
+  --output /tmp/cursor-security.md \
+  --stdin /tmp/security-prompt.md &
 CURSOR_PID=$!
-# ... launch other reviews ...
+# ... launch up to 2 more (3 total) ...
 wait $CURSOR_PID
 ```
 
-### Isolated Worktree (Git Projects)
-
-Cursor can spin up an isolated git worktree so headless writes don't collide
-with the main working tree:
+### JSON Output
 
 ```bash
-$GTIMEOUT 300 "$AGENT" -p --trust --force -w headless-task \
-  --workspace /path/to/project "Implement feature X" 2>/dev/null
+bash skills/cursor/scripts/cursor-exec.sh review \
+  --workspace /path/to/project \
+  --json \
+  --output /tmp/cursor-out.json \
+  "Analyze test coverage gaps."
+
+jq -r '.result' /tmp/cursor-out.json
 ```
 
-The worktree is created at `~/.cursor/worktrees/<reponame>/headless-task`.
-Use `--worktree-base main` to base it on a specific branch.
+## Model Selection
 
-### Resume a Session
+Default is account setting (currently `opus-4.6-thinking`). Override with `--model`.
 
-```bash
-# Resume by session ID
-$GTIMEOUT 120 "$AGENT" -p --trust --resume SESSION_ID \
-  "Continue where you left off" 2>/dev/null
+| ID | Best For |
+|---|---|
+| `opus-4.6-thinking` | Deep review, architecture analysis (default) |
+| `sonnet-4.6-thinking` | Good balance for generation and review |
+| `sonnet-4.6` | Fast, no extended thinking |
+| `gpt-5.4-high` | Strong alternative for code generation |
+| `gpt-5.4-medium` | Faster GPT option |
+| `gemini-3.1-pro` | Large context, web research |
 
-# Resume the most recent session
-$GTIMEOUT 120 "$AGENT" -p --trust --continue \
-  "Continue where you left off" 2>/dev/null
-```
+## Concurrency Limit (MANDATORY)
 
-## MCP Server Access
+Max **3** simultaneous Cursor processes. The wrapper enforces this via PID file
+(`/tmp/cursor-slots.pid`) with mkdir-based atomic locking.
 
-Cursor Agent loads MCP servers from `.cursor/mcp.json` in the workspace.
-In headless mode, use `--approve-mcps` to auto-approve server connections:
+## Write Safety Warning
 
-```bash
-$GTIMEOUT 120 "$AGENT" -p --trust --force --approve-mcps \
-  --workspace /path/to/project "PROMPT" 2>/dev/null
-```
-
-To inspect configured MCPs:
-```bash
-"$AGENT" mcp list
-"$AGENT" mcp list-tools SERVER_NAME
-```
-
-## Output Validation (MANDATORY)
-
-Same discipline as Codex and Gemini — validate by character count, not lines:
-
-```bash
-CHARS=$(wc -c < OUTPUT_FILE 2>/dev/null | tr -d ' ')
-if [ "${CHARS:-0}" -lt 50 ]; then
-  echo "Cursor output too small (${CHARS} chars) — likely failed"
-fi
-```
-
-For JSON output, also validate the structure:
-```bash
-IS_ERROR=$(jq -r '.is_error // false' < OUTPUT_FILE 2>/dev/null)
-if [ "$IS_ERROR" = "true" ]; then
-  echo "Cursor returned an error"
-fi
-```
-
-For analysis tasks against a non-disposable git checkout, detect unexpected
-mutations after the run:
-
-```bash
-BEFORE=$(git -C /path/to/project status --porcelain 2>/dev/null || true)
-# ... run Cursor analysis task ...
-AFTER=$(git -C /path/to/project status --porcelain 2>/dev/null || true)
-if [ "$AFTER" != "$BEFORE" ]; then
-  echo "Cursor modified the tree during analysis — inspect diff before continuing"
-fi
-```
-
-## Critical Gotchas
-
-1. **`-p` is mandatory for headless** — without it, the CLI enters interactive
-   TUI mode and hangs indefinitely in subshells. Every headless call MUST
-   include `-p`.
-
-2. **`--trust` is mandatory for headless** — without it, the CLI prompts for
-   workspace trust interactively and hangs.
-
-3. **`--force` is not a write gate on the current CLI** — on the
-   `2026.03.11-6dfa30c` build, plain `-p` wrote files in disposable tests.
-   Use `--force` for unattended command/tool execution, but do not rely on
-   omitting it to protect the workspace.
-
-4. **`--mode ask` and `--mode plan` are not reliably read-only** — despite the
-   CLI help text, both modes wrote files in disposable tests on 2026-03-13.
-   Use isolated worktrees or disposable copies when analysis must be
-   non-destructive.
-
-5. **Always wrap with `$GTIMEOUT`** — the CLI can hang on network issues,
-   large codebases, or MCP server failures. 120s for reviews, 180s for
-   generation, 300s for large refactors.
-
-6. **`2>/dev/null` is mandatory** — stderr contains ANSI escape codes,
-   progress indicators, and MCP startup logs that corrupt output and
-   inflate context.
-
-7. **JSON output is a single object, not JSONL** — unlike Codex, Cursor's
-   `--output-format json` returns one JSON object with a `.result` field.
-   Use `jq -r '.result'` to extract.
-
-8. **Prompts are positional** — the prompt is the last argument after all
-   flags. Putting flags after the prompt string causes parse errors.
-
-9. **Model defaults to account setting** — currently `opus-4.6-thinking`.
-   Override with `--model <id>` when a cheaper or faster model suffices.
-
-10. **Worktrees require a git repo** — `-w` fails silently in non-git
-    directories. Only use for git-tracked projects.
-
-11. **There is no `-o` output flag on the current CLI** — `agent -p ... -o file`
-    exits `1` with no stderr. Capture output with stdout redirection instead:
-    `"$AGENT" -p ... > OUTPUT_FILE` or `--output-format json > OUTPUT_FILE`.
-
-12. **Session resume requires the session ID** — get it from JSON output's
-    `session_id` field, or use `agent ls` to list recent sessions.
-
-## Flag Reference
-
-| Short | Long | Purpose |
-|---|---|---|
-| `-p` | `--print` | Headless mode (**REQUIRED**) |
-| `-f` | `--force` | Auto-approve commands/tool execution |
-| `-c` | `--cloud` | Cloud mode |
-| `-w` | `--worktree` | Isolated git worktree |
-| `-H` | `--header` | Custom request header |
-| — | `--trust` | Trust workspace (**REQUIRED for headless**) |
-| — | `--yolo` | Alias for `--force` |
-| — | `--workspace` | Working directory |
-| — | `--model` | Model override |
-| — | `--mode` | `ask` or `plan`; neither is a reliable safety boundary |
-| — | `--output-format` | `text`, `json`, `stream-json` |
-| — | `--approve-mcps` | Auto-approve MCP servers |
-| — | `--resume` | Resume a session by ID |
-| — | `--continue` | Resume most recent session |
-| — | `--plan` | Shorthand for `--mode plan` |
-| — | `--sandbox` | `enabled` or `disabled` |
+**`--mode ask` and `--mode plan` are NOT reliably read-only.** On the current
+build (`2026.03.11-6dfa30c`), both modes have been observed to modify files.
+When the main worktree must stay untouched, use `--worktree` for isolated writes.
 
 ## Fallback Behavior
 
-| Failure Mode | Action |
-|---|---|
-| CLI not installed | Skip, note "Cursor Agent unavailable" |
-| Not authenticated | Skip, note "Cursor Agent not logged in" |
-| Timeout (exit 130/137) | Retry once with 180s; then skip |
-| Rate limited | Back off 30s, retry; then skip |
-| All 3 slots occupied | Queue and retry after 30s; skip after 3 attempts |
-| MCP server hang | Timeout catches it; consider `--approve-mcps` |
+| Failure | Exit Code | Fallback |
+|---------|-----------|----------|
+| CLI not installed | 1 | Skip, note "Cursor Agent unavailable" |
+| Not authenticated | 1 | Skip, note "Cursor Agent not logged in" |
+| Timeout | 124 | Retry once with `--timeout 240`; then skip |
+| Rate limited | — | Back off 30s, retry; then skip |
+| All slots full | 2 | Wait and retry; then skip |
+| JSON error result | 4 | Retry once; then skip |
 
-## Examples
+## Critical Gotchas
 
-```
-Skill (counter-review): Needs Cursor to review project for completeness issues.
---> RESULT=$($GTIMEOUT 120 "$AGENT" -p --trust --mode ask --workspace /path/to/project \
-      "Scan for stubs, TODOs, placeholder values, empty catch blocks, and functions with no real implementation. Report each with file path and line number." 2>/dev/null)
-    echo "$RESULT" > /tmp/cursor-completeness-review.md
-```
+1. **Always use the wrapper** — never construct raw `agent` commands
+2. **`-p` + `--trust` are mandatory** — wrapper handles both. Without them: TUI hang
+3. **`--mode ask`/`--mode plan` are NOT safely read-only** — use `--worktree` for isolation
+4. **`--force` is not a write gate** — it auto-approves tool execution, doesn't prevent writes
+5. **Prompts are positional** — must be LAST arg after all flags. Wrapper handles this
+6. **No `-o` output flag** — must redirect stdout. Wrapper handles via `--output`
+7. **JSON output is a single object, not JSONL** — use `jq -r '.result'` to extract
+8. **Worktrees require a git repo** — `-w` fails in non-git directories
+9. **`2>/dev/null` is mandatory** — stderr has ANSI codes, MCP logs, spinners. Wrapper handles this
 
-```
-Skill (meta-review): Firing Cursor alongside Codex and Gemini in parallel.
---> $GTIMEOUT 120 "$AGENT" -p --trust --mode ask --workspace /path/to/project \
-      "$(cat /tmp/review-prompt.md)" 2>/dev/null > /tmp/cursor-review-output.md &
-    echo $! >> /tmp/cursor-slots.pid
-    CURSOR_PID=$!
-    # ... launch other reviews ...
-    wait $CURSOR_PID
-```
+## Consuming Skills
 
-```
-Skill (meta-execute): Cursor writes code in an isolated worktree.
---> $GTIMEOUT 300 "$AGENT" -p --trust --force -w wu-3-auth \
-      --model sonnet-4.6-thinking --workspace /path/to/project \
-      "Implement JWT refresh token rotation per the spec in project-plan.md WU-3" 2>/dev/null
-```
-
-```
-Skill (quick analysis): Fast analysis pass with a cheap model.
---> $GTIMEOUT 60 "$AGENT" -p --trust --mode ask --model sonnet-4.6 \
-      --workspace /path/to/project \
-      "List all exported functions in src/api/ that lack input validation" 2>/dev/null
-```
+Skills that use Cursor include wrapper commands as fenced code blocks — this is
+calling the API, not violating the driver boundary. The old "Load `/cursor` for
+invocation syntax" pattern is replaced with direct wrapper calls.
 
 ---
 

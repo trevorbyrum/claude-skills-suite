@@ -209,25 +209,31 @@ context and scope instructions.
    db_upsert 'research-execute' 'counter' '{NNN}/sonnet' "$COUNTER_CONTENT"
    ```
 
-   **Counter 2 — Gemini CLI:** Load `/gemini` for invocation syntax.
-   Use the `/gemini` Research / Analysis template with a 120s timeout. Do not
-   force `@generalist_agent`.
-   Prompt: `"Read this research synthesis and challenge it. Identify weak
+   **Counter 2 — Gemini CLI:**
+   ```bash
+   bash skills/gemini/scripts/gemini-exec.sh research \
+     --output /tmp/counter-gemini.md \
+     "Read this research synthesis and challenge it. Identify weak
    evidence, missing angles, and overclaimed conclusions. Be adversarial.
-   $(cat artifacts/research/summary/{NNN}-{topic-slug}.md)"`.
-   Output to `/tmp/counter-gemini.md`. Then store in DB:
+   $(cat artifacts/research/summary/{NNN}-{topic-slug}.md)"
+   ```
+   Then store in DB:
    ```bash
    source artifacts/db.sh && db_upsert 'research-execute' 'counter' '{NNN}/gemini' "$(cat /tmp/counter-gemini.md)" && rm /tmp/counter-gemini.md
    ```
 
-   **Counter 3 — Codex CLI:** Load `/codex` for invocation syntax.
-   Key params: `--sandbox read-only`, `--ephemeral`, 180s timeout.
-   Prompt: write a temp prompt file that contains the instructions below plus
-   `artifacts/research/summary/{NNN}-{topic-slug}.md`, then pass it to Codex
-   via stdin (`- < /tmp/counter-codex-prompt.md`):
+   **Counter 3 — Codex CLI:** Write a temp prompt file containing the
+   synthesis plus counter instructions, then invoke:
+   ```bash
+   bash skills/codex/scripts/codex-exec.sh review \
+     --output /tmp/counter-codex.md \
+     --stdin /tmp/counter-codex-prompt.md
+   ```
+   The prompt file (`/tmp/counter-codex-prompt.md`) should contain:
    `"Review this research synthesis for technical accuracy. Flag any claims
    about libraries, frameworks, or APIs that are outdated or incorrect."`
-   Output to `/tmp/counter-codex.md`. Then store in DB:
+   followed by the contents of `artifacts/research/summary/{NNN}-{topic-slug}.md`.
+   Then store in DB:
    ```bash
    source artifacts/db.sh && db_upsert 'research-execute' 'counter' '{NNN}/codex' "$(cat /tmp/counter-codex.md)" && rm /tmp/counter-codex.md
    ```

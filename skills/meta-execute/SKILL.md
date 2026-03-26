@@ -122,13 +122,12 @@ Wave assignments are visible and correct.
 
 ### Phase 2: Worker Pool Setup [Inline]
 
-Check availability of all CLIs. Load each driver skill for its path
-discovery pattern:
-- `/vibe` — generation CLI path discovery
-- `/cursor` — Cursor Agent CLI path discovery
-- `/codex` — Codex CLI path discovery
-- `/copilot` — Copilot CLI path discovery
-- `/gemini` — Gemini CLI path discovery
+Check availability of all CLIs:
+- **Codex**: `bash skills/codex/scripts/codex-exec.sh review --skip-concurrency --timeout 10 "Reply OK" > /dev/null 2>&1` (exit 0 = available, exit 1 = unavailable)
+- **Vibe**: load `/vibe` for path resolution
+- **Cursor**: load `/cursor` for path resolution
+- **Copilot**: load `/copilot` for path resolution
+- **Gemini**: load `/gemini` for path resolution
 
 Note which CLIs are available (available / unavailable) before proceeding.
 
@@ -326,10 +325,12 @@ If the primary generators are unavailable:
 | Cursor only | Codex `exec --sandbox workspace-write` as second generator |
 | Both | Codex Best-of-2 (original pattern) with Sonnet subagent fallback |
 
-Codex fallback invocation — load `/codex` for invocation syntax. Key params:
-`--sandbox workspace-write`, `--ephemeral`, `--cd <project-root>`, 180s timeout.
-Prompt source: `/tmp/wu-{ID}-prompt.md` via stdin
-(`- < /tmp/wu-{ID}-prompt.md`).
+Codex fallback invocation:
+```bash
+bash skills/codex/scripts/codex-exec.sh generate \
+  --cd <project-root> \
+  --stdin /tmp/wu-{ID}-prompt.md
+```
 
 Sonnet subagent fallback:
 1. Each subagent receives the same prompt built from `agents/worker.md`.
@@ -373,13 +374,14 @@ For Codex specifically, feed the prompt file via stdin. Do not inline it as
 `$(cat /tmp/...md)`.
 
 **1. Codex (review+fix)** — the only reviewer that writes files.
-Load `/codex` for invocation syntax. Key params: `--sandbox workspace-write`,
-`--ephemeral`, `--cd <worktree-or-branch-path>`, 180s timeout.
-Prompt source: `/tmp/wu-{ID}-codex-review-prompt.md` via stdin
-(`- < /tmp/wu-{ID}-codex-review-prompt.md`). Output to
-`/tmp/wu-{ID}-review-codex.md` via `-o`.
 Uses the specialized prompt from `agents/codex-reviewer.md` which includes
 fix-application instructions.
+```bash
+bash skills/codex/scripts/codex-exec.sh generate \
+  --cd <worktree-or-branch-path> \
+  --output /tmp/wu-{ID}-review-codex.md \
+  --stdin /tmp/wu-{ID}-codex-review-prompt.md
+```
 
 **2. Sonnet subagent** — Agentic Rubrics (unchanged from original):
 ```
@@ -397,9 +399,12 @@ Key params: `--add-dir <worktree-or-branch-path>`, 120s timeout.
 Prompt: `$(cat /tmp/wu-{ID}-review-prompt.md)`. Output to
 `/tmp/wu-{ID}-review-copilot.md`.
 
-**5. Gemini (best practices)** — load `/gemini` for invocation syntax.
-Key params: 120s timeout. Prompt: `$(cat /tmp/wu-{ID}-review-prompt.md)`.
-Output to `/tmp/wu-{ID}-review-gemini.md`.
+**5. Gemini (best practices)**:
+```bash
+bash skills/gemini/scripts/gemini-exec.sh review \
+  --stdin /tmp/wu-{ID}-review-prompt.md \
+  --output /tmp/wu-{ID}-review-gemini.md
+```
 Gemini fallback: if unavailable or times out, retry with Copilot (using a
 different `--model`). If both fail, proceed with 4 reviewers.
 

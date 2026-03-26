@@ -68,12 +68,14 @@ ui-review is conditional — only included if frontend files (`*.tsx`, `*.jsx`, 
 
 2. Create the `artifacts/reviews/` directory if it does not exist.
 
-3. Check CLI availability for multi-model execution. Load `/codex`, `/gemini`,
-   and `/copilot` for path resolution — each driver skill has the canonical
-   discovery pattern. Note which models are available. Copilot is Gemini's
-   fallback — if Gemini is unavailable or fails, retry with Copilot before
-   skipping. Unavailable models are skipped — synthesis adjusts confidence
-   scoring accordingly.
+3. Check CLI availability for multi-model execution. Verify wrapper scripts
+   exist and binaries resolve:
+   - **Codex**: `bash skills/codex/scripts/codex-exec.sh review --skip-concurrency --timeout 10 "Reply OK" > /dev/null 2>&1` (exit 0 = available, exit 1 = unavailable)
+   - **Gemini**: load `/gemini` for path resolution
+   - **Copilot**: load `/copilot` for path resolution
+   Note which models are available. Copilot is Gemini's fallback — if Gemini
+   is unavailable or fails, retry with Copilot before skipping. Unavailable
+   models are skipped — synthesis adjusts confidence scoring accordingly.
 
 4. Identify the ~10 most important source files for Gemini context. These
    are typically: entry point, main config, core business logic files, auth
@@ -248,8 +250,6 @@ Never rely on subagents to write to the DB — they will silently fail.
 
 #### Step 2b: Launch Codex (8-9 lenses — max 5 concurrent, queue the rest)
 
-Use the `/codex` skill for invocation syntax.
-
 Total Codex lenses: `security-review`, `refactor-review`,
 `completeness-review`, `integration-review`, `perf-review`, `dep-audit`,
 `log-review`, `breaking-change-review`, and `ui-review` (if frontend).
@@ -270,14 +270,16 @@ Each Codex exec:
 1. Receives a review prompt assembled from the atomic skill's instructions
    AND the `$SAST_SUMMARY` from Phase 1.5
 2. Runs read-only with relevant source directories added
-3. Pipes output to a temp file, then stores in DB:
+3. Invoke via wrapper, then store in DB:
    ```bash
+   bash skills/codex/scripts/codex-exec.sh review \
+     --cd <project-root> \
+     --add-dir <relevant-dir> \
+     --output /tmp/lens-codex-{lens}.md \
+     "LENS_PROMPT"
+   # After completion:
    source artifacts/db.sh && db_upsert '{lens}' 'findings' 'codex' "$(cat /tmp/lens-codex-{lens}.md)" && rm /tmp/lens-codex-{lens}.md
    ```
-
-   Load `/codex` for invocation syntax. Key params: `--sandbox read-only`,
-   `--ephemeral`, `--cd <project-root>`, `--add-dir <relevant-dir>`, 120s timeout.
-   Prompt: `LENS_PROMPT`. Output to `/tmp/lens-codex-{lens}.md`.
 
 If Codex is unavailable, skip all Codex reviews and note it in synthesis.
 
