@@ -108,7 +108,7 @@ mcp__sonarqube__search_my_sonarqube_projects(q: "<project-key>")
 **2b. If no project exists, create and scan:**
 ```bash
 # Create project via SonarQube API
-curl -s -u "$SONARQUBE_TOKEN:" "http://100.127.173.50:9000/api/projects/create" \
+curl -s -u "$SONARQUBE_TOKEN:" "$SONARQUBE_BASE_URL/api/projects/create" \
   -d "name=<ProjectName>&project=<project-key>"
 
 # Run sonar-scanner (JDK 21 required)
@@ -119,7 +119,7 @@ npx --yes sonar-scanner \
   -Dsonar.projectName=<ProjectName> \
   -Dsonar.sources=. \
   -Dsonar.exclusions="**/node_modules/**,**/dist/**,**/compact/**,**/artifacts/**,**/research/**" \
-  -Dsonar.host.url=http://100.127.173.50:9000 \
+  -Dsonar.host.url="$SONARQUBE_BASE_URL" \
   -Dsonar.token="$SONARQUBE_TOKEN" 2>&1
 ```
 
