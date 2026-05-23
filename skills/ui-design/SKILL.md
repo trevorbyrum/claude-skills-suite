@@ -1,6 +1,7 @@
 ---
 name: ui-design
 description: Generates UI components and pages following the project design system. Use when building frontend, creating components, or styling interfaces.
+disable-model-invocation: true
 ---
 
 # UI Design
@@ -15,7 +16,7 @@ code generation and enforces the project design system throughout.
 
 - The target component/page requirements (from user or work unit)
 - `project-context.md` — for project-specific brand, stack, and constraints
-- Shared design system references (loaded on demand from `../../references/`)
+- Shared design system references (loaded on demand from `references/`)
 
 ## Outputs
 
@@ -29,8 +30,8 @@ code generation and enforces the project design system throughout.
 
 Before writing any UI code:
 
-1. Read `../../references/design-tokens.css` to understand the available token vocabulary.
-2. Read `../../references/design-anti-patterns.md` to internalize what NOT to do.
+1. Read `references/design-tokens.css` to understand the available token vocabulary.
+2. Read `references/design-anti-patterns.md` to internalize what NOT to do.
 3. Check if the project has its own design overrides (custom font, custom accent color, brand guidelines). If `project-context.md` specifies a design system, that overrides the defaults.
 
 ### Phase 2: Establish Direction
@@ -78,7 +79,7 @@ Write the component/page code following these rules:
 
 ### Phase 4: Anti-Pattern Check
 
-Before presenting the output, scan for these (read `../../references/design-anti-patterns.md` for the full list):
+Before presenting the output, scan for these (read `references/design-anti-patterns.md` for the full list):
 
 1. Any raw color values? Replace with tokens.
 2. Any inline styles? Move to className.
@@ -93,7 +94,7 @@ If any anti-pattern is found, fix it before showing the code.
 
 ### Phase 5: Accessibility Verification
 
-Quick check against `../../references/design-a11y.md`:
+Quick check against `references/design-a11y.md`:
 
 1. Is there semantic structure (`<main>`, heading hierarchy)?
 2. Do all images have `alt`?
@@ -106,7 +107,7 @@ Fix any failures before presenting.
 
 ## References (on-demand)
 
-Read these from the shared `../../references/` directory when needed:
+Read these from the shared `references/` directory when needed:
 - `design-tokens.css` — OKLCH design tokens, spacing scale, type scale, shadows, motion
 - `design-anti-patterns.md` — 17 AI slop patterns with detection and fixes
 - `design-typography.md` — Font stacks, type scale, weight rules, banned fonts, pairings
@@ -147,4 +148,4 @@ User: Add a modal for user profile editing.
 
 ---
 
-Before completing, read and follow `../../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/cross-cutting-rules.md`.

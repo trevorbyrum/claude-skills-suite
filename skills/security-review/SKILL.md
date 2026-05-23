@@ -1,6 +1,7 @@
 ---
 name: security-review
 description: Focused security audit covering dependencies, auth, secrets exposure, input validation, network boundaries, agent-specific patterns, supply chain, and IaC. Uses P0/P1/P2 priority tiers and OWASP Agentic Top 10. Use before production deploys or when handling sensitive data.
+disable-model-invocation: true
 ---
 
 # Security Review
@@ -225,4 +226,4 @@ User: This code went through 5 rounds of AI iteration. Is it secure?
 
 ---
 
-Before completing, read and follow `../references/review-lens-framework.md` and `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/review-lens-framework.md` and `references/cross-cutting-rules.md`.

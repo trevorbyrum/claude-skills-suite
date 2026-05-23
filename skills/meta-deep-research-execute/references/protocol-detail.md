@@ -20,12 +20,12 @@ during the clarifying interview. Your job:
    | Type | Primary Workers |
    |---|---|
    | Academic | Sonnet (MCP connectors) |
-   | Technical | Codex + Sonnet (Context7, GitHub) |
-   | Market | Gemini (Google Search) |
+   | Technical | Codex MCP + Sonnet (Context7, GitHub) |
+   | Market | Sonnet (WebSearch + web grounding subagent) |
    | Reasoning | Opus subagent (extended thinking) |
 
-3. **Build the dispatch table.** Assign each sub-question to 2-3 model
-   families. Every sub-question MUST be covered by at least 2 families.
+3. **Build the dispatch table.** Assign each sub-question to 2-3 models.
+   Every sub-question MUST be covered by at least 2 models.
 
 4. **Write the dispatch table** to the artifact DB:
    ```bash
@@ -78,148 +78,108 @@ artifact DB per connector (written by the research-connector agent).
 
 ### Track C: Codex Technical Validation (up to 4 workers)
 
-**Hard limit: 4 concurrent Codex sessions.** Reserve 1 slot for Phase 2.5/3.
-
-```bash
-if command -v whence >/dev/null 2>&1; then
-  CODEX=$(whence -p codex 2>/dev/null)
-elif type -P codex >/dev/null 2>&1; then
-  CODEX=$(type -P codex 2>/dev/null)
-else
-  CODEX=$(command -v codex 2>/dev/null)
-fi
-test -x "$CODEX" || CODEX="/opt/homebrew/bin/codex"
-if [ ! -x "$CODEX" ] && [ -d "$HOME/.nvm/versions/node" ]; then
-  CODEX=$(find "$HOME/.nvm/versions/node" -path '*/bin/codex' \( -type f -o -type l \) 2>/dev/null | sort -V | tail -1)
-fi
-export PATH="$(dirname "$CODEX"):$PATH"
-GTIMEOUT="/opt/homebrew/bin/gtimeout"; test -x "$GTIMEOUT" || GTIMEOUT="/opt/homebrew/bin/timeout"
-test -x "$CODEX" || { echo "Codex unavailable — reassigning to Sonnet"; }
-```
+**Hard limit: 4 concurrent Codex MCP jobs.** Reserve 1 slot for Phase 2.5/3.
+Check availability with `mcp__codex-mcp__codex_health`; if unhealthy,
+reassign Codex work to Sonnet.
 
 **Workers 1-3: Primary research** — each gets 1-2 technical sub-questions.
 
+Call `mcp__codex-mcp__codex_start` for each worker:
+```json
+{
+  "mode": "review",
+  "cwd": "/path/to/project",
+  "prompt": "[assembled primary research prompt]",
+  "timeout_sec": 300
+}
+```
+The assembled primary research prompt asks Codex to check library docs, API
+signatures, known issues, source tally, findings, confidence, and unverified
+gaps for `[SUB-QUESTION]` using `[relevant excerpt]`.
+Poll with `codex_status`, fetch with `codex_result`, then store the final
+message:
 ```bash
-$GTIMEOUT 180 "$CODEX" exec --ephemeral --sandbox read-only --skip-git-repo-check \
-  --cd /path/to/project \
-  "Research the following with technical precision. Check actual library
-   docs, API signatures, and known issues. Do NOT speculate — say so if
-   unsure. Cite sources. At the end, include:
-   ## Source Tally
-   - Queries executed: [N]
-   - Results scanned: [N]
-   - Sources cited: [N]
-
-   Question: [SUB-QUESTION]
-   Context: [relevant excerpt]
-
-   Format:
-   ## Findings
-   [evidence-backed answers with citations]
-   ## Confidence
-   [HIGH/MEDIUM/LOW with justification]
-   ## What I Could NOT Verify
-   [gaps — be honest]" \
-  2>/dev/null > /tmp/codex-worker-{N}.md
-source artifacts/db.sh && db_upsert 'research-connector' 'findings' '{NNN}D/{descriptive-name}' "$(cat /tmp/codex-worker-{N}.md)" && rm /tmp/codex-worker-{N}.md
-echo $! >> /tmp/codex-slots.pid
+source artifacts/db.sh && db_upsert 'research-connector' 'findings' '{NNN}D/{descriptive-name}' "$CODEX_FINAL_MESSAGE"
 ```
 
 **Worker 4: Devil's advocate** — find problems with the likely answers.
 Covers all sub-questions assigned to Codex devil's advocate in the dispatch
 table. Broader scope than primary workers to compensate for single worker.
 
+Call `mcp__codex-mcp__codex_start`:
+```json
+{
+  "mode": "debate",
+  "cwd": "/path/to/project",
+  "prompt": "[assembled devil's advocate prompt]",
+  "timeout_sec": 300
+}
+```
+The assembled devil's advocate prompt asks for evidence against conventional
+answers, known bugs, failure cases, better alternatives, outdated claims,
+per-question counter-evidence, risks, and source tally.
+Store the final message:
 ```bash
-$GTIMEOUT 180 "$CODEX" exec --ephemeral --sandbox read-only --skip-git-repo-check \
-  --cd /path/to/project \
-  "You are a devil's advocate. Find evidence AGAINST the conventional
-   wisdom. Look for: known bugs, failure cases, better alternatives,
-   outdated info people still cite. Include Source Tally at end.
-
-   Questions: [ALL DEVIL'S ADVOCATE SUB-QUESTIONS]
-   Conventional answers: [what most would say per question]
-
-   Format per question:
-   ## Counter-Evidence
-   ## Alternative Approaches
-   ## Risks of Conventional Approach
-   ## Source Tally
-   - Queries executed: [N]
-   - Results scanned: [N]
-   - Sources cited: [N]" \
-  2>/dev/null > /tmp/codex-devil.md
-source artifacts/db.sh && db_upsert 'research-connector' 'findings' '{NNN}D/{descriptive-name}-counter' "$(cat /tmp/codex-devil.md)" && rm /tmp/codex-devil.md
-echo $! >> /tmp/codex-slots.pid
+source artifacts/db.sh && db_upsert 'research-connector' 'findings' '{NNN}D/{descriptive-name}-counter' "$CODEX_FINAL_MESSAGE"
 ```
 
-### Track D: Gemini Web Grounding (2 instances)
+### Track D: Sonnet Web Grounding (2 subagents)
 
-**Hard limit: 2 concurrent Gemini sessions.** All Gemini phases are sequential
-with Track D — never overlap with Phase 2.5 or Phase 3 Gemini calls.
+Two Sonnet subagents with WebSearch tool access. No external CLI required —
+runs entirely within the Claude runtime, so no concurrency limit applies.
 
+**Subagent 1: Primary research + case studies** — broad web grounding via
+WebSearch. Combines primary research and case study collection.
+
+Spawn an Agent (e.g., `subagent_type: "general-purpose"`) with this prompt:
+```
+You have WebSearch tool access. Research thoroughly using web search.
+Prioritize recent (2025-2026) sources, practitioner posts, conference
+talks, case studies. First-hand experience > theory.
+
+Sub-questions: [LIST FROM DISPATCH TABLE]
+
+Per question provide:
+- Answer with citations (URLs)
+- Source quality (authoritative vs blog vs forum)
+- Recency
+- Consensus level (agreed vs contested)
+
+ALSO find real-world case studies and production deployments for each
+question where applicable. Per case: company, scale, outcome, timeline,
+would-they-do-it-again. Prioritize engineering blogs over generic how-tos.
+
+At the END, include:
+## Source Tally
+- Web searches executed: [N]
+- Results scanned: [N]
+- Sources cited: [N]
+
+Return the entire research output as text. The orchestrator will store it.
+```
+After the subagent returns, store its output in the DB:
 ```bash
-GEMINI="$(whence -p gemini 2>/dev/null)"
-[ -n "$GEMINI" ] || GEMINI="$(type -P gemini 2>/dev/null)"
-if [ -z "$GEMINI" ] && [ -d "$HOME/.nvm/versions/node" ]; then
-  GEMINI="$(find "$HOME/.nvm/versions/node" -path '*/bin/gemini' \( -type f -o -type l \) -print 2>/dev/null | sort -V | tail -n 1)"
-fi
-test -x "$GEMINI" || GEMINI="/opt/homebrew/bin/gemini"
-test -x "$GEMINI" || { echo "Gemini unavailable — using WebSearch fallback"; }
-
-GTIMEOUT="/opt/homebrew/bin/gtimeout"
-test -x "$GTIMEOUT" || GTIMEOUT="$(command -v gtimeout 2>/dev/null || command -v timeout 2>/dev/null)"
-test -x "$GTIMEOUT" || { echo "GNU timeout unavailable — using WebSearch fallback"; }
+source artifacts/db.sh && db_upsert 'research-connector' 'findings' '{NNN}D/{descriptive-name}-primary-web' "$AGENT_RESPONSE"
 ```
 
-**Gemini 1: Primary research + case studies** — broad, Google Search grounded.
-Combines primary research and real-world case study collection into one worker.
+**Subagent 2: Contradiction hunter** — explicitly adversarial.
 
-```bash
-unset DEBUG 2>/dev/null
-unset GOOGLE_CLOUD_PROJECT 2>/dev/null
-unset CI 2>/dev/null
-$GTIMEOUT 180 "$GEMINI" -m gemini-2.5-flash-lite -o json -p \
-  "Research thoroughly using web search. Find recent (2025-2026) sources,
-   practitioner posts, conference talks, case studies. Prioritize
-   first-hand experience over theory.
-
-   Questions: [LIST]
-
-   Per question provide:
-   - Answer with citations (URLs)
-   - Source quality (authoritative vs blog vs forum)
-   - Recency
-   - Consensus level (agreed vs contested)
-
-   ALSO find real-world case studies and production deployments for each
-   question where applicable. Per case: company, scale, outcome, timeline,
-   would-they-do-it-again. Prioritize engineering blogs over generic how-tos.
-
-   At the END, include:
-   ## Source Tally
-   - Web searches executed: [N]
-   - Results scanned: [N]
-   - Sources cited: [N]" \
-  2>/dev/null | jq -r '.response // empty' > /tmp/gemini-primary.md
-source artifacts/db.sh && db_upsert 'research-connector' 'findings' '{NNN}D/{descriptive-name}' "$(cat /tmp/gemini-primary.md)" && rm /tmp/gemini-primary.md
+Spawn a second Sonnet subagent with this prompt:
 ```
+You have WebSearch tool access. Find CONTRADICTING evidence and dissenting
+opinions on:
 
-**Gemini 2: Contradiction hunter** — explicitly adversarial.
+[LIST WITH EXPECTED MAINSTREAM ANSWERS]
 
+Find: posts arguing AGAINST the popular answer, failure stories, unexpected
+benchmarks, migration-away stories.
+
+Include Source Tally at end (searches executed, results scanned, cited).
+Return the entire research output as text.
+```
+Store output in the DB:
 ```bash
-unset DEBUG 2>/dev/null
-unset GOOGLE_CLOUD_PROJECT 2>/dev/null
-unset CI 2>/dev/null
-$GTIMEOUT 180 "$GEMINI" -m gemini-2.5-flash-lite -o json -p \
-  "Find CONTRADICTING evidence and dissenting opinions on:
-   [LIST WITH EXPECTED MAINSTREAM ANSWERS]
-
-   Find: posts arguing AGAINST the popular answer, failure stories,
-   unexpected benchmarks, migration-away stories.
-
-   Include Source Tally at end (searches executed, results scanned, cited)." \
-  2>/dev/null | jq -r '.response // empty' > /tmp/gemini-dissent.md
-source artifacts/db.sh && db_upsert 'research-connector' 'findings' '{NNN}D/{descriptive-name}-dissent' "$(cat /tmp/gemini-dissent.md)" && rm /tmp/gemini-dissent.md
+source artifacts/db.sh && db_upsert 'research-connector' 'findings' '{NNN}D/{descriptive-name}-dissent' "$AGENT_RESPONSE"
 ```
 
 Wait for all Phase 2 workers to complete.
@@ -237,7 +197,7 @@ store:
 |---|---|---|---|---|
 | [descriptive-name] | B (Consensus) | 12 | 87 | 14 |
 | [descriptive-name] | C (Codex) | 5 | 34 | 8 |
-| [descriptive-name] | D (Gemini) | 8 | 156 | 22 |
+| [descriptive-name] | D (Sonnet WebSearch) | 8 | 156 | 22 |
 | ... | ... | ... | ... | ... |
 | **TOTAL** | | **N** | **N** | **N** |
 
@@ -261,8 +221,8 @@ tangential topics should be folded in.
 
 ### Step 1: Coverage Debate
 
-Launch Opus + Codex reviewers in parallel. Gemini reviewer runs AFTER Track D
-completes (sequential — respects the 2-session Gemini hard limit).
+Launch three reviewers in parallel: an Opus subagent, a Sonnet subagent
+with WebSearch, and a Codex MCP worker.
 
 Each reads:
 - The original `deep_research_prompt.md`
@@ -272,7 +232,7 @@ Each reads:
 
 Their job: identify what's missing, what's thin, and what new threads emerged.
 
-**Reviewer A — Opus subagent** (parallel with Reviewer C):
+**Reviewer A — Opus subagent** (parallel with Reviewer B and C):
 
 Spawn an Opus subagent with this prompt:
 ```
@@ -282,17 +242,15 @@ your job is to find what needs MORE research, not to decide if research is
 
 Read:
 1. {research_folder}/deep_research_prompt.md (original scope)
-2. {research_folder}/dispatch-table.md (what was planned)
-3. All findings files in {research_folder}/ (what was found)
-4. {research_folder}/source-tally.md (coverage breadth)
+2. The dispatch table from the artifact DB (what was planned)
+3. All Phase 2 findings in the artifact DB (what was found)
+4. The source tally (coverage breadth)
 
 Identify:
 - Which original sub-questions have THIN evidence (low source count,
   single-source, low confidence)? These need reinforcement.
 - What NEW topics, options, or alternatives surfaced during the research
-  that weren't in the original prompt but are clearly relevant? (e.g., a
-  competing framework mentioned in 3 sources, an alternative architecture
-  pattern, a relevant academic field that keeps appearing)
+  that weren't in the original prompt but are clearly relevant?
 - Are there well-known approaches, tools, or patterns that practitioners
   would expect to see but the research missed entirely?
 - Which connectors underperformed (low result counts)? What different
@@ -300,80 +258,67 @@ Identify:
 - How far is the source count from the 1000+ target? Which tracks should
   contribute more?
 
-Write your assessment and store in the artifact DB:
-skill: meta-deep-research-execute, phase: coverage-review, label: {NNN}D/claude
+Return your assessment as text. The orchestrator will store it.
 
 Format:
 ## Thin Areas Needing Reinforcement
-[findings with insufficient evidence — list specific sub-questions]
 ## Emergent Topics to Research
-[topics that surfaced during Phase 2 — each with WHY it's relevant]
 ## Missed Options/Approaches
-[well-known alternatives the research didn't cover]
 ## Underperforming Connectors
-[which connectors need different/additional queries]
 ## Source Count Gap
-[current count vs 1000+ target, which tracks can contribute more]
+```
+After the subagent returns, store via:
+```bash
+source artifacts/db.sh && db_upsert 'meta-deep-research-execute' 'coverage-review' '{NNN}D/opus' "$AGENT_RESPONSE"
 ```
 
-**Reviewer B — Gemini** (runs AFTER Track D Gemini workers complete — sequential):
+**Reviewer B — Sonnet subagent with WebSearch** (parallel with A and C):
+
+Spawn a Sonnet subagent with WebSearch tool access:
+```
+You are a research coverage auditor with web access. This is a MANDATORY
+expansion phase — your job is to find what's missing, not to confirm
+things are fine.
+
+Read the original research prompt and all findings below. Then use WebSearch
+to actively hunt for what the research missed:
+- Search for 'best [topic] alternatives 2026' — what options weren't covered?
+- Search for recent developments (2025-2026) the findings don't mention
+- Search for practitioner criticism of the approaches the research favors
+- Search for adjacent topics that practitioners commonly consider alongside
+  the main question
+
+Original prompt: $(cat {research_folder}/deep_research_prompt.md)
+Findings summary: [compressed key findings from each file]
+Source count: [current total from tally]
+
+Return your assessment as text in this format:
+## Missing Options/Approaches (with URLs)
+## Recent Developments Not Covered (with URLs)
+## Adjacent Topics Worth Researching
+## Thin Areas in Current Findings
+## Source Gaps and Suggested Queries
+```
+After the subagent returns:
 ```bash
-# Wait for Track D Gemini workers to finish before starting
-unset DEBUG 2>/dev/null
-unset GOOGLE_CLOUD_PROJECT 2>/dev/null
-unset CI 2>/dev/null
-$GTIMEOUT 180 "$GEMINI" -m gemini-2.5-flash-lite -o json -p \
-  "You are a research coverage auditor with web access. This is a MANDATORY
-   expansion phase — your job is to find what's missing, not to confirm
-   things are fine.
-
-   Read the original research prompt and all findings below. Then use web
-   search to actively hunt for what the research missed:
-   - Search for 'best [topic] alternatives 2026' — what options weren't covered?
-   - Search for recent developments (2025-2026) the findings don't mention
-   - Search for practitioner criticism of the approaches the research favors
-   - Search for adjacent topics that practitioners commonly consider alongside
-     the main question
-
-   Original prompt: $(cat {research_folder}/deep_research_prompt.md)
-   Findings summary: [compressed key findings from each file]
-   Source count: [current total from tally]
-
-   Format:
-   ## Missing Options/Approaches (with URLs)
-   ## Recent Developments Not Covered (with URLs)
-   ## Adjacent Topics Worth Researching
-   ## Thin Areas in Current Findings
-   ## Source Gaps and Suggested Queries" \
-  2>/dev/null | jq -r '.response // empty' > /tmp/coverage-review-gemini.md
-source artifacts/db.sh && db_upsert 'meta-deep-research-execute' 'coverage-review' '{NNN}D/gemini' "$(cat /tmp/coverage-review-gemini.md)" && rm /tmp/coverage-review-gemini.md
+source artifacts/db.sh && db_upsert 'meta-deep-research-execute' 'coverage-review' '{NNN}D/sonnet' "$AGENT_RESPONSE"
 ```
 
-**Reviewer C — Codex** (parallel with Reviewer A — uses reserved slot 5):
+**Reviewer C — Codex** (parallel with A and B — uses reserved slot 5):
+```json
+{
+  "mode": "review",
+  "cwd": "<project-root>",
+  "add_dirs": ["{research_folder}"],
+  "prompt": "[assembled technical coverage audit prompt]",
+  "timeout_sec": 300
+}
+```
+The assembled coverage prompt asks Codex to identify missing libraries,
+unverified technical claims, additional repos/docs/benchmarks, missing
+comparison dimensions, emergent topics, and suggested connector queries.
 ```bash
-$GTIMEOUT 180 "$CODEX" exec --ephemeral --sandbox read-only \
-  --add-dir {research_folder} \
-  "You are a technical coverage auditor. This is a MANDATORY expansion
-   phase — find what's missing in the research.
-
-   Review the research findings in this directory against the original
-   prompt. Identify:
-   - Libraries, frameworks, or tools that should have been evaluated
-     but weren't (check package registries, awesome-lists, alternatives)
-   - Technical claims that are unverified or based on outdated info
-   - GitHub repos, official docs, or benchmarks that should be checked
-   - Missing comparison dimensions (performance, DX, community size,
-     maintenance status, licensing)
-   - Technical topics that the findings reference but didn't research
-
-   Format:
-   ## Missing Technical Coverage
-   ## Unverified Claims to Investigate
-   ## Additional Sources to Check (specific repos/docs/benchmarks)
-   ## Emergent Technical Topics
-   ## Suggested Additional Queries per Connector" \
-  2>/dev/null > /tmp/coverage-review-codex.md
-source artifacts/db.sh && db_upsert 'meta-deep-research-execute' 'coverage-review' '{NNN}D/codex' "$(cat /tmp/coverage-review-codex.md)" && rm /tmp/coverage-review-codex.md
+source artifacts/db.sh && db_upsert 'meta-deep-research-execute' 'coverage-review' '{NNN}D/codex' "$CODEX_FINAL_MESSAGE"
 ```
 
 ### Step 2: Addendum Creation
@@ -386,12 +331,12 @@ reviews into a concrete research addendum.
 You are the research addendum author. You have NOT participated in any prior
 research or review — you are fresh eyes.
 
-Read:
+Read from the artifact DB:
 1. {research_folder}/deep_research_prompt.md (original scope)
-2. {research_folder}/coverage-review-claude.md
-3. {research_folder}/coverage-review-gemini.md
-4. {research_folder}/coverage-review-codex.md
-5. {research_folder}/source-tally.md
+2. coverage-review/{NNN}D/opus
+3. coverage-review/{NNN}D/sonnet
+4. coverage-review/{NNN}D/codex
+5. source-tally/{NNN}D
 
 This is a MANDATORY expansion. Your job is to write the addendum, not to
 decide if one is needed. There is ALWAYS an addendum in deep research.
@@ -414,9 +359,8 @@ Synthesize the three coverage reviews and create a prioritized expansion plan:
 Prioritize ruthlessly — the addendum should be focused, not a kitchen sink.
 Rank by impact on the original research question.
 
-Store in the artifact DB:
-skill: meta-deep-research-execute, phase: addendum, label: {NNN}D
-(Use `db_upsert 'meta-deep-research-execute' 'addendum' '{NNN}D' "$CONTENT"`)
+Return the addendum as text. The orchestrator will store it via:
+db_upsert 'meta-deep-research-execute' 'addendum' '{NNN}D' "$CONTENT"
 
 Format:
 # Deep Research Addendum — {NNN}D
@@ -470,96 +414,81 @@ The addendum ALWAYS produces additional research. Execute it:
 
 ## Phase 3: Cross-Model Debate (3 Rounds)
 
-All debate files go in `{research_folder}/debate/`.
+All debate files go in the artifact DB under
+`meta-deep-research-execute` / `debate` / `{NNN}D/{stem}`.
 
 **IMPORTANT**: The debate covers ALL findings — both original Phase 2 AND any
 addendum findings. Position papers must reference addendum findings where
 relevant.
 
+Three "models" participate: **Opus** (Anthropic high reasoning), **Sonnet**
+(Anthropic balanced + WebSearch), **Codex** (OpenAI technical).
+
 ### Round 1: Present (parallel)
 
-Each model family compiles its Phase 2 (+ addendum) findings into a position paper.
+Each model compiles its Phase 2 (+ addendum) findings into a position paper.
 
-**Claude Position** (Sonnet subagent): Read all Track A + B output files
-(including addendum files). For each sub-question: state claim, list evidence
-with citations, rate confidence (HIGH/MEDIUM/LOW), flag gaps.
+**Opus Position** (Opus subagent): Read all Track A output and reasoning-
+type sub-questions (including addendum files). For each sub-question: state
+claim, list evidence with citations, rate confidence (HIGH/MEDIUM/LOW),
+flag gaps.
 
 Output stored in artifact DB: `meta-deep-research-execute` / `debate` /
-`{NNN}D/position-claude` (written by the Sonnet subagent).
+`{NNN}D/position-opus` (written by the orchestrator after the subagent returns).
 
-**Codex Position:**
-```bash
-$GTIMEOUT 180 "$CODEX" exec --ephemeral --sandbox read-only \
-  --cd /path/to/project \
-  "Read the Codex research findings and compile a position paper.
-   Per sub-question: claim, evidence, confidence,
-   gaps. If primary and devil's advocate conflict, present BOTH." \
-  2>/dev/null > /tmp/debate-position-codex.md
-source artifacts/db.sh && db_upsert 'meta-deep-research-execute' 'debate' '{NNN}D/position-codex' "$(cat /tmp/debate-position-codex.md)" && rm /tmp/debate-position-codex.md
+**Sonnet Position** (Sonnet subagent with WebSearch): Read all Track B + D
+output (connector sweep + web grounding). Same per sub-question format.
+Where contradiction research disagrees with primary, present BOTH.
+
+Stored: `meta-deep-research-execute` / `debate` / `{NNN}D/position-sonnet`.
+
+**Codex Position** (Codex MCP `review` mode):
+```json
+{
+  "mode": "review",
+  "cwd": "<project-root>",
+  "prompt": "Read the Codex research findings (from artifact DB labels {NNN}D/* under research-connector/findings, specifically the codex-authored ones). Compile a position paper. Per sub-question: claim, evidence, confidence, gaps. If primary and devil's advocate conflict, present BOTH.",
+  "timeout_sec": 300
+}
 ```
-
-**Gemini Position:**
+Store the final message:
 ```bash
-unset DEBUG 2>/dev/null
-unset GOOGLE_CLOUD_PROJECT 2>/dev/null
-unset CI 2>/dev/null
-$GTIMEOUT 180 "$GEMINI" -m gemini-2.5-flash-lite -o json -p \
-  "Read these findings and compile a position paper.
-   Per sub-question: claim, evidence (URLs), confidence, gaps.
-   Where contradiction research disagrees with primary, present BOTH.
-
-   [Pass compressed key findings from DB]" \
-  2>/dev/null | jq -r '.response // empty' > /tmp/debate-position-gemini.md
-source artifacts/db.sh && db_upsert 'meta-deep-research-execute' 'debate' '{NNN}D/position-gemini' "$(cat /tmp/debate-position-gemini.md)" && rm /tmp/debate-position-gemini.md
+source artifacts/db.sh && db_upsert 'meta-deep-research-execute' 'debate' '{NNN}D/position-codex' "$CODEX_FINAL_MESSAGE"
 ```
 
 ### Round 2: Challenge (parallel, adversarial)
 
 Each model reads the OTHER two models' positions and attacks them.
 
-**Claude challenges Codex + Gemini** (Sonnet subagent):
-Read `position-codex.md` and `position-gemini.md`. Challenge: insufficient
+**Opus challenges Sonnet + Codex** (Opus subagent):
+Read `position-sonnet` and `position-codex` from DB. Challenge: insufficient
 evidence, wrong/outdated technical details, contradictions between them,
 missing perspectives, hallucinated claims.
+Stored: `meta-deep-research-execute` / `debate` / `{NNN}D/challenge-opus`.
 
-Output stored in artifact DB: `meta-deep-research-execute` / `debate` /
-`{NNN}D/challenge-claude` (written by the Sonnet subagent).
+**Sonnet challenges Opus + Codex** (Sonnet subagent with WebSearch):
+Same task with web-grounded fact-checking — Sonnet can run fresh WebSearch
+queries to verify or dispute claims with current sources.
+Stored: `meta-deep-research-execute` / `debate` / `{NNN}D/challenge-sonnet`.
 
-**Codex challenges Claude + Gemini:**
+**Codex challenges Opus + Sonnet** (Codex MCP `debate` mode):
 ```bash
-# Read positions from DB first
 source artifacts/db.sh
-CLAUDE_POS=$(db_read 'meta-deep-research-execute' 'debate' '{NNN}D/position-claude')
-GEMINI_POS=$(db_read 'meta-deep-research-execute' 'debate' '{NNN}D/position-gemini')
-$GTIMEOUT 180 "$CODEX" exec --ephemeral --sandbox read-only \
-  "You are a technical fact-checker. Challenge these position papers:
-   Claude: $CLAUDE_POS
-   Gemini: $GEMINI_POS
-
-   Focus on: wrong library claims, unsourced performance claims,
-   incorrect API behavior, architecture that won't scale." \
-  2>/dev/null > /tmp/debate-challenge-codex.md
-db_upsert 'meta-deep-research-execute' 'debate' '{NNN}D/challenge-codex' "$(cat /tmp/debate-challenge-codex.md)" && rm /tmp/debate-challenge-codex.md
+OPUS_POS=$(db_read 'meta-deep-research-execute' 'debate' '{NNN}D/position-opus')
+SONNET_POS=$(db_read 'meta-deep-research-execute' 'debate' '{NNN}D/position-sonnet')
 ```
-
-**Gemini challenges Claude + Codex:**
+Then call `mcp__codex-mcp__codex_run`:
+```json
+{
+  "mode": "debate",
+  "cwd": "<project-root>",
+  "prompt": "You are a technical fact-checker. Challenge these position papers:\nOpus: <OPUS_POS>\nSonnet: <SONNET_POS>\n\nFocus on: wrong library claims, unsourced performance claims, incorrect API behavior, architecture that won't scale.",
+  "timeout_sec": 300
+}
+```
+Store:
 ```bash
-unset DEBUG 2>/dev/null
-source artifacts/db.sh
-CLAUDE_POS=$(db_read 'meta-deep-research-execute' 'debate' '{NNN}D/position-claude')
-CODEX_POS=$(db_read 'meta-deep-research-execute' 'debate' '{NNN}D/position-codex')
-unset GOOGLE_CLOUD_PROJECT 2>/dev/null
-unset CI 2>/dev/null
-$GTIMEOUT 180 "$GEMINI" -m gemini-2.5-flash-lite -o json -p \
-  "You are a fact-checker with web access. Verify or challenge:
-   Claude: $CLAUDE_POS
-   Codex: $CODEX_POS
-
-   Per major claim: search the web, mark as CONFIRMED / DISPUTED /
-   UNVERIFIABLE with sources. Focus on recency — other models may
-   have outdated training data." \
-  2>/dev/null | jq -r '.response // empty' > /tmp/debate-challenge-gemini.md
-db_upsert 'meta-deep-research-execute' 'debate' '{NNN}D/challenge-gemini' "$(cat /tmp/debate-challenge-gemini.md)" && rm /tmp/debate-challenge-gemini.md
+source artifacts/db.sh && db_upsert 'meta-deep-research-execute' 'debate' '{NNN}D/challenge-codex' "$CODEX_FINAL_MESSAGE"
 ```
 
 ### Round 3: Respond + Converge (parallel)
@@ -569,45 +498,33 @@ Each model reads challenges against its position and responds with one of:
 - **Rebut**: "Original claim stands because [additional evidence]."
 - **Escalate**: "Insufficient evidence either way. Flagging as unresolved."
 
-**Claude responds** (Sonnet subagent): reads challenges from DB (`{NNN}D/challenge-codex`
-and `{NNN}D/challenge-gemini`). Stores output in artifact DB:
-`meta-deep-research-execute` / `debate` / `{NNN}D/response-claude`.
+**Opus responds** (Opus subagent): reads challenges from DB (`{NNN}D/challenge-sonnet`
+and `{NNN}D/challenge-codex`). Stores output in artifact DB:
+`meta-deep-research-execute` / `debate` / `{NNN}D/response-opus`.
 
-**Codex responds:**
+**Sonnet responds** (Sonnet subagent with WebSearch): same task, with the
+ability to run fresh WebSearch queries to back rebuttals with new evidence.
+Stored: `meta-deep-research-execute` / `debate` / `{NNN}D/response-sonnet`.
+
+**Codex responds** (Codex MCP `debate` mode):
 ```bash
 source artifacts/db.sh
 CODEX_POS=$(db_read 'meta-deep-research-execute' 'debate' '{NNN}D/position-codex')
-CLAUDE_CHAL=$(db_read 'meta-deep-research-execute' 'debate' '{NNN}D/challenge-claude')
-GEMINI_CHAL=$(db_read 'meta-deep-research-execute' 'debate' '{NNN}D/challenge-gemini')
-$GTIMEOUT 180 "$CODEX" exec --ephemeral --sandbox read-only \
-  "Read challenges against your position and respond per claim:
-   CONCEDE / REBUT / ESCALATE with evidence.
-
-   Your position: $CODEX_POS
-   Claude's challenges: [extract Codex-targeted from: $CLAUDE_CHAL]
-   Gemini's challenges: [extract Codex-targeted from: $GEMINI_CHAL]" \
-  2>/dev/null > /tmp/debate-response-codex.md
-db_upsert 'meta-deep-research-execute' 'debate' '{NNN}D/response-codex' "$(cat /tmp/debate-response-codex.md)" && rm /tmp/debate-response-codex.md
+OPUS_CHAL=$(db_read 'meta-deep-research-execute' 'debate' '{NNN}D/challenge-opus')
+SONNET_CHAL=$(db_read 'meta-deep-research-execute' 'debate' '{NNN}D/challenge-sonnet')
 ```
-
-**Gemini responds:**
+Then call `mcp__codex-mcp__codex_run`:
+```json
+{
+  "mode": "debate",
+  "cwd": "<project-root>",
+  "prompt": "Read challenges against your position and respond per claim: CONCEDE / REBUT / ESCALATE with evidence.\n\nYour position: <CODEX_POS>\nOpus's challenges: [extract Codex-targeted from <OPUS_CHAL>]\nSonnet's challenges: [extract Codex-targeted from <SONNET_CHAL>]",
+  "timeout_sec": 300
+}
+```
+Store:
 ```bash
-unset DEBUG 2>/dev/null
-source artifacts/db.sh
-GEMINI_POS=$(db_read 'meta-deep-research-execute' 'debate' '{NNN}D/position-gemini')
-CLAUDE_CHAL=$(db_read 'meta-deep-research-execute' 'debate' '{NNN}D/challenge-claude')
-CODEX_CHAL=$(db_read 'meta-deep-research-execute' 'debate' '{NNN}D/challenge-codex')
-unset GOOGLE_CLOUD_PROJECT 2>/dev/null
-unset CI 2>/dev/null
-$GTIMEOUT 180 "$GEMINI" -m gemini-2.5-flash-lite -o json -p \
-  "Read challenges against your position. Use fresh web searches for
-   additional evidence. Respond per claim: CONCEDE / REBUT / ESCALATE.
-
-   Your position: $GEMINI_POS
-   Claude's challenges: [extract Gemini-targeted from: $CLAUDE_CHAL]
-   Codex's challenges: [extract Gemini-targeted from: $CODEX_CHAL]" \
-  2>/dev/null | jq -r '.response // empty' > /tmp/debate-response-gemini.md
-db_upsert 'meta-deep-research-execute' 'debate' '{NNN}D/response-gemini' "$(cat /tmp/debate-response-gemini.md)" && rm /tmp/debate-response-gemini.md
+source artifacts/db.sh && db_upsert 'meta-deep-research-execute' 'debate' '{NNN}D/response-codex' "$CODEX_FINAL_MESSAGE"
 ```
 
 ## Phase 4: Convergence Scoring
@@ -657,8 +574,8 @@ file output — all intermediate artifacts are in the artifact DB.
 
 > Research folder: research/{NNN}D/
 > Date: {DATE}
-> Models: Opus 4.6 (orchestrator), Sonnet 4.6 ({N} subagents),
->   Codex gpt-5.3 ({N} workers), Gemini 3.1 Pro ({N} instances)
+> Models: Opus 4.7 (orchestrator + reasoning), Sonnet 4.6 ({N} subagents),
+>   Codex gpt-5.3 ({N} workers)
 > MCP connectors used: {LIST}
 > Debate rounds: 3
 > Addendum cycle: [yes — {reason} | no]
@@ -687,9 +604,9 @@ its confidence level, and model agreement.]
 **Finding**: [synthesized answer]
 
 **Evidence**:
-- Claude: [evidence with citations]
+- Opus: [evidence with citations]
+- Sonnet: [evidence with citations + URLs]
 - Codex: [evidence with citations]
-- Gemini: [evidence with URLs]
 
 **Debate**: [how the claim evolved through 3 rounds]
 
@@ -732,7 +649,7 @@ These are the hallucinations caught by debate.]
 [From Context7, MS Learn, GitHub]
 
 ### Web Sources
-[From Gemini, WebSearch — with URLs]
+[From Sonnet WebSearch subagents — with URLs]
 
 ### Code Evidence
 [From Codex, GitHub search]
@@ -762,11 +679,11 @@ Keep the report-back minimal — the dispatcher reads the full summary itself.
 
 ## Error Handling
 
-- **Gemini unavailable**: Use WebSearch for Track D. Debate becomes 2-model.
-- **Codex unavailable**: Redistribute to Sonnet subagents. Debate becomes 2-model.
-- **Both unavailable**: All research through Claude. Replace debate with
-  self-consistency (3 independent Sonnet subagents, flag disagreements).
-  Note "single-model" in methodology.
+- **Codex unavailable**: Redistribute to Sonnet subagents. Debate becomes
+  2-model (Opus + Sonnet). Note "Codex unavailable" in methodology.
+- **WebSearch unavailable**: Track D Sonnet subagents do inference-only
+  synthesis from training data. Flag findings as "inference-only, no fresh
+  sources."
 - **Subagent failure**: Note the gap. Mark affected claims as UNCERTAIN.
 - **Debate timeout**: Proceed with available responses. 2-model debate is
   still better than none.
@@ -781,17 +698,16 @@ Keep the report-back minimal — the dispatcher reads the full summary itself.
 
 These limits reflect the user's actual subscription/platform caps:
 
-| CLI | Max Concurrent | Allocation |
+| Worker Type | Max Concurrent | Allocation |
 |---|---|---|
-| **Codex** | **5 sessions** | 4 Phase 2 workers + 1 reserved for Phase 2.5/3 |
-| **Gemini** | **2 sessions** | 2 Phase 2 instances; Phase 2.5/3 run AFTER Phase 2 completes (sequential) |
+| **Codex MCP** | **5 jobs** | 4 Phase 2 workers + 1 reserved for Phase 2.5/3 |
+| **Sonnet subagents** | no hard limit | Tracks B + D + Phase 2.5 review + debate rounds |
+| **Opus subagents** | no hard limit | Track A + coverage review + addendum author + debate rounds |
 
 **Rules:**
-- NEVER exceed these limits. If a phase needs more, run sequentially.
-- Track D (Gemini) must fully complete before Phase 2.5 Gemini reviewer starts.
+- NEVER exceed the Codex 5-slot limit. If a phase needs more, run sequentially.
 - Track C (Codex) workers 1-4 must fully complete before Phase 2.5 Codex reviewer starts.
-- Debate rounds are already sequential (1 Codex + 1 Gemini per round), so no conflict.
-- Addendum cycle reuses the same slots after prior workers complete.
+- Debate rounds (1 Codex job per round across 3 rounds) reuse the same Codex slot sequentially.
 
 ## Cost Awareness
 
@@ -799,10 +715,9 @@ This skill is expensive. ~17 workers + mandatory coverage expansion + addendum
 workers + 3 debate rounds.
 
 - Opus subagents: 2-3 x ~100K tokens each (Phase 2) + 1 coverage reviewer
-  + 1 addendum author = up to 5 Opus subagents
-- Sonnet subagents: 8-10 x ~50K tokens each + addendum connectors
-- Codex workers: up to 4 concurrent (of 5 max) + 1 reserved for coverage/debate
-- Gemini instances: 2 concurrent (of 2 max); coverage/debate run sequential
-- Debate rounds: 3 x 3 models x ~30K tokens each (sequential per round)
+  + 1 addendum author + 2 debate roles = up to 7 Opus subagents
+- Sonnet subagents: 10-12 x ~50K tokens each (Tracks B + D + coverage + debate)
+- Codex workers: up to 4 concurrent in Phase 2 (of 5 max) + 1 reserved for
+  coverage and each debate round
 
 Reserve for decisions where being wrong costs more than the research.

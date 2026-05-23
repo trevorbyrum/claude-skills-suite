@@ -1,6 +1,7 @@
 ---
 name: review-fix
 description: Implement fixes from meta-review findings. Parses review-synthesis.md, presents actionable items for user approval, dispatches Codex/Sonnet workers, verifies fixes. Use after meta-review or any review lens.
+disable-model-invocation: true
 ---
 
 # review-fix
@@ -128,11 +129,16 @@ which fixes to implement. The user may also:
 
 #### Worker Pool Setup
 
-Check Codex availability — load `/codex` for the path discovery pattern.
-Note whether Codex is available or unavailable.
+Check Codex availability with `mcp__codex-mcp__codex_health`:
+```json
+{
+  "cwd": "<project-root>"
+}
+```
+Healthy = available; unhealthy or failed MCP call = unavailable. Note the result.
 
 **Pool limits** (from `general.md`):
-- Codex: **5 concurrent** exec processes
+- Codex: **5 concurrent** MCP jobs
 - Active worktrees: **4 maximum**
 - Without Best-of-N: up to **4 fix units at a time**
 - Sonnet fallback: same 4-worktree cap
@@ -154,9 +160,17 @@ The context package contains:
 
 For each approved fix unit, dispatch a worker:
 
-**Codex worker** — load `/codex` for invocation syntax. Key params:
-`--sandbox workspace-write`, `--ephemeral`, `--cd <project-root>`, 180s timeout.
-Prompt: `FIXER_PROMPT` (from `agents/fixer.md` with all placeholders filled).
+**Codex worker** — call `mcp__codex-mcp__codex_run` with the fixer prompt:
+```json
+{
+  "mode": "generate",
+  "cwd": "<project-root>",
+  "prompt": "FIXER_PROMPT",
+  "timeout_sec": 300
+}
+```
+Build `FIXER_PROMPT` from `agents/fixer.md` with all placeholders filled.
+For long prompts, keep the prompt self-contained in the MCP `prompt` field.
 
 **Sonnet fallback:**
 Use `isolation: "worktree"` for parallel subagents. Each receives the same
@@ -285,4 +299,4 @@ Action: Mark the finding as false positive. Remove from fix queue.
 
 ---
 
-Before completing, read and follow `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/cross-cutting-rules.md`.

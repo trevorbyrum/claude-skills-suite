@@ -1,6 +1,7 @@
 ---
 name: drift-review
 description: "Compares code against project-context.md, features.md, and project-plan.md to find drift. Use when docs may be out of sync with reality, or after a long implementation sprint."
+disable-model-invocation: true
 ---
 
 # Drift Review
@@ -33,8 +34,7 @@ does the code match what the docs say?
   ```
 - **Multi-model mode** (called by meta-review): Store per-model findings in the artifact DB:
   - Sonnet: `db_upsert 'drift-review' 'findings' 'sonnet' "$CONTENT"`
-  - Codex: `db_upsert 'drift-review' 'findings' 'codex' "$CONTENT"`
-  - Gemini: `db_upsert 'drift-review' 'findings' 'gemini' "$CONTENT"`
+  - (drift-review is Sonnet-only in the current meta-review fan-out)
 
 ## Instructions
 
@@ -47,7 +47,7 @@ AGE=$(db_age_hours 'drift-review' 'findings' 'standalone')
 # For multi-model: db_age_hours 'drift-review' 'findings' 'sonnet'
 ```
 If `$AGE` is non-empty and less than 24, report: "Found fresh drift-review findings from $AGE hours ago. Reuse them? (y/n)"
-If the user says yes, read findings from DB: `db_read 'drift-review' 'findings' 'standalone'` (or `sonnet`/`codex`/`gemini` as appropriate).
+If the user says yes, read findings from DB: `db_read 'drift-review' 'findings' 'standalone'` (or `sonnet` as appropriate).
 If no record exists or user says no, proceed with a fresh scan.
 
 ### 1. Extract Documented Claims
@@ -99,16 +99,19 @@ picture of the system.
 
 After comparing docs to code, run a reverse check — find things in code that docs don't mention:
 
-1. Load `/codex` for invocation syntax. If Codex is unavailable, skip to step 4.
-2. If available, dispatch a Codex worker. Key params: `--sandbox read-only`,
-   `--ephemeral`, `--cd <project-root>`, 120s timeout.
-   Prompt: `"Scan this codebase for features, endpoints, configuration options,
-   and behaviors that are NOT documented in any .md file in the project root.
-   List each with file:line. Focus on: API endpoints without docs, env vars
-   without .env.example entries, CLI flags without README mention, and database
-   tables without schema docs."`.
-3. Add any undocumented findings to the drift report as "Code-ahead" items.
-4. If Codex is unavailable, skip this step — the standard doc-to-code comparison still runs.
+1. Run a Codex scan with `mcp__codex-mcp__codex_run`. If the MCP call fails,
+   skip to step 4.
+   ```json
+   {
+     "mode": "review",
+     "cwd": "<project-root>",
+     "prompt": "Scan this codebase for features, endpoints, configuration options, and behaviors that are NOT documented in any .md file in the project root. List each with file:line. Focus on: API endpoints without docs, env vars without .env.example entries, CLI flags without README mention, and database tables without schema docs.",
+     "timeout_sec": 300
+   }
+   ```
+2. Read the final message and add any undocumented findings to the drift report
+   as "Code-ahead" items.
+3. If Codex is unavailable or times out, skip — the standard doc-to-code comparison still runs.
 
 ### 4. Status Accuracy Check
 
@@ -163,7 +166,7 @@ End with:
 ## Execution Mode
 
 - **Standalone**: Spawn the `review-lens` agent (`subagent_type: "review-lens"`) with this skill's lens instructions and input files. Stores findings in DB as `db_upsert 'drift-review' 'findings' 'standalone'`.
-- **Via meta-review**: The `review-lens` agent runs the Sonnet review, while Codex (`/codex`) and Gemini (`/gemini`) run in parallel with the same prompt. Each model stores findings in DB under label `sonnet`, `codex`, or `gemini`. The meta-review skill handles synthesis.
+- **Via meta-review**: The `review-lens` agent runs the Sonnet review only — drift-review is a Sonnet-only lens in the current meta-review fan-out (architecture/strategy lens, no Codex pair). Findings stored under label `sonnet`. The meta-review skill handles synthesis.
 
 ## Examples
 
@@ -184,4 +187,4 @@ User: A new developer is joining. Can they trust our project docs?
 
 ---
 
-Before completing, read and follow `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/cross-cutting-rules.md`.

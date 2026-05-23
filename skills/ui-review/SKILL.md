@@ -1,6 +1,7 @@
 ---
 name: ui-review
 description: Audits UI for AI anti-patterns, token violations, a11y failures, and inconsistency. Use before frontend deploys or after UI sprints.
+disable-model-invocation: true
 ---
 
 # UI Review
@@ -16,7 +17,7 @@ user sees.
 
 - The full codebase (frontend files: `*.tsx`, `*.jsx`, `*.css`, `*.scss`, `*.module.css`)
 - `project-context.md` — for project-specific design system, brand, stack
-- Shared design system references from `../../references/`
+- Shared design system references from `references/`
 - `features.md` — to verify UI completeness per feature
 
 ## Outputs
@@ -52,7 +53,7 @@ Exclude: `design-tokens.css` itself, config files, SVG attributes, test files.
 
 ### Phase 2: Anti-Pattern Detection
 
-Read `../../references/design-anti-patterns.md` for the full catalog. Check for:
+Read `references/design-anti-patterns.md` for the full catalog. Check for:
 
 1. **Default fonts** — Inter or Roboto as the ONLY font with no display variant.
 2. **Gradient backgrounds** — `linear-gradient`, `radial-gradient` on page/section backgrounds.
@@ -75,7 +76,7 @@ Flag components that only implement the happy-path populated state.
 
 ### Phase 4: Accessibility Scan
 
-Read `../../references/design-a11y.md` for the full checklist. Automated checks:
+Read `references/design-a11y.md` for the full checklist. Automated checks:
 
 ```bash
 # Missing alt text
@@ -148,7 +149,7 @@ See `references/review-lens-framework.md`. Lens: `ui-review`.
 
 ## References (on-demand)
 
-Read these from the shared `../../references/` directory when needed:
+Read these from the shared `references/` directory when needed:
 - `design-tokens.css` — The token vocabulary to audit against
 - `design-anti-patterns.md` — Full catalog of 17 AI slop patterns with detection commands
 - `design-typography.md` — Font rules, banned fonts, pairing guidelines
@@ -184,4 +185,4 @@ User: Run ui-review after the UI sprint.
 
 ---
 
-Before completing, read and follow `../../references/review-lens-framework.md` and `../../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/review-lens-framework.md` and `references/cross-cutting-rules.md`.

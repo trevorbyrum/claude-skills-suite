@@ -1,6 +1,7 @@
 ---
 name: refactor-review
 description: Code quality and efficiency pass. Catches over-engineering, duplication, bloat, truncated code, and unnecessary abstractions. Use before any major refactor or cleanup.
+disable-model-invocation: true
 ---
 
 # Refactor Review
@@ -146,4 +147,4 @@ User: Before I refactor the API layer, tell me what else needs cleanup too.
 
 ---
 
-Before completing, read and follow `../references/review-lens-framework.md` and `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/review-lens-framework.md` and `references/cross-cutting-rules.md`.

@@ -1,8 +1,8 @@
 # Shared Review Prompt Template
 
-Prompt template used by 4 of the 5 reviewers in the panel: Sonnet subagent,
-Cursor (--mode ask), Copilot, and Gemini. These are all **read-only**
-reviewers — they score code but do NOT modify files.
+Prompt template used by 2-3 of the reviewers in the panel: the rubric Sonnet
+subagent, the architecture Sonnet subagent, and (optionally) Copilot. These
+are all **read-only** reviewers — they score code but do NOT modify files.
 
 For the Codex review+fix prompt (the only reviewer that writes files),
 see `codex-reviewer.md`.

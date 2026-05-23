@@ -1,6 +1,7 @@
 ---
 name: integration-review
 description: Checks for dead wiring, missing config/env entries, incomplete teardown, and unbundled assets. Use before deployment or after implementation sprints.
+disable-model-invocation: true
 ---
 
 # Integration Review
@@ -166,4 +167,4 @@ User: After the last sprint, make sure nothing got left disconnected.
 
 ---
 
-Before completing, read and follow `../references/review-lens-framework.md` and `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/review-lens-framework.md` and `references/cross-cutting-rules.md`.

@@ -9,7 +9,7 @@ Write `artifacts/reviews/production-readiness.md` following this structure exact
 
 > Project: {{PROJECT_NAME}}
 > Date: {{DATE}}
-> Assessed by: Claude (Opus) + Codex + Gemini
+> Assessed by: Claude (Opus + Sonnet subagents) + Codex MCP
 > Stack: {{TECH_STACK}}
 > Service Criticality: {{TIER}} (Critical / Standard / Low)
 
@@ -89,9 +89,9 @@ delivery configured, etc. This section recognizes what's already done right.}}
 ## Methodology
 
 - **Review lenses**: 7 lenses via Sonnet subagents (review-lens agent)
-- **Production scan**: 5 Codex CLI read-only scans (Dims 8-12)
-- **Stack research**: Gemini CLI with Google Search grounding
-- **Practices audit**: Gemini codebase cross-reference
+- **Production scan**: 5 Codex MCP read-only scans (Dims 8-12)
+- **Stack research**: Sonnet subagent with WebSearch grounding
+- **Practices audit**: Codex MCP codebase cross-reference
 - **Scoring**: Evidence-based rubric, cross-validated across models
 - **Criticality weighting**: Dims 11-12 weighted by service tier
 - **Confidence**: Multi-model agreement scoring (findings flagged by

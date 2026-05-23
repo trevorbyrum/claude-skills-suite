@@ -7,26 +7,44 @@ Reference for skill-forge. This is the ground truth for skill structure.
 ```yaml
 ---
 name: <skill-name>
-description: <trigger-focused description, ≤150 chars>
+description: <trigger-focused description, ≤250 chars>
+argument-hint: "[optional-arg]"
 ---
 ```
 
 ### Frontmatter Rules
 
-- **`name`**: lowercase, hyphenated, matches directory name exactly
+- **`name`**: lowercase, hyphenated, matches directory name exactly. Max 64 chars. Defaults to directory name if omitted.
 - **`description`**: The primary trigger mechanism. How Claude Code decides to load this skill.
   - Write in **third person** ("Evaluates...", "Commits and pushes...", "Scans for...")
   - Include **specific trigger phrases** ("Use when...", "Invoke with /name or when user says...")
-  - **≤150 characters** — descriptions over this limit may be silently truncated
+  - **≤250 characters** — descriptions over this limit are truncated
   - **Never use always-on language** — "Runs after completing work" or "Triggers whenever X changes" reads as a standing instruction and causes infinite loops. Use explicit invocation: "Invoke explicitly with /name"
+- **`argument-hint`**: Shown during autocomplete. E.g. `[issue-number]` or `[filepath]`. Omit if the skill takes no arguments.
 
-### Optional Frontmatter Fields
+### Optional Advanced Fields
+
+These fields are valid but used less commonly. Include them only when the skill specifically needs them.
 
 ```yaml
-argument-hint: [description of accepted arguments]
-```
+# --- Visibility & invocation ---
+# disable-model-invocation: true     # Prevents Claude from auto-loading this skill. Default: false
+# user-invocable: false              # Hides skill from the / menu. Default: true
 
-Do NOT add fields that don't exist in the spec. No `disable-model-invocation`, no custom fields.
+# --- Execution environment ---
+# model: claude-opus-4-5             # Model to use when this skill is active
+# effort: low | medium | high | max  # Effort level override
+# context: fork                      # Run in a forked subagent context
+# agent: <subagent-type>             # Subagent type; requires context: fork
+# shell: bash | powershell           # Shell for !command blocks. Default: bash
+
+# --- Permissions & scope ---
+# allowed-tools: [Bash, Read, Edit]  # Tools Claude may use without asking for permission
+# hooks:                             # Hooks scoped to this skill's lifecycle
+#   - ...
+# paths:                             # Glob patterns limiting when skill auto-activates
+#   - "src/**/*.ts"
+```
 
 ## Body Structure
 
@@ -80,7 +98,6 @@ What the skill produces. Two patterns exist:
 - **Multi-model mode** (called by meta-review): Store per-model findings:
   - Sonnet: `db_upsert '<skill-name>' 'findings' 'sonnet' "$CONTENT"`
   - Codex: `db_upsert '<skill-name>' 'findings' 'codex' "$CONTENT"`
-  - Gemini: `db_upsert '<skill-name>' 'findings' 'gemini' "$CONTENT"`
 ```
 
 **Pattern B — File output (for final deliverables or project docs):**
@@ -155,8 +172,8 @@ How the skill runs standalone vs as part of a meta-skill:
 
 - **Standalone**: Spawn the `review-lens` agent with this skill's lens instructions.
   Stores findings as `db_upsert '<skill-name>' 'findings' 'standalone'`.
-- **Via meta-review**: The `review-lens` agent runs Sonnet review, while Codex and Gemini
-  run in parallel. Each stores findings under label `sonnet`/`codex`/`gemini`.
+- **Via meta-review**: The `review-lens` agent runs Sonnet review, while Codex MCP
+  runs in parallel for code-centric lenses. Each stores findings under label `sonnet`/`codex`.
 ```
 
 ### 7. References (on-demand) (if applicable)
@@ -205,7 +222,7 @@ Skills use a 3-level loading strategy:
 
 | Level | What | When Loaded | Budget |
 |---|---|---|---|
-| 1 | Frontmatter only | Always (part of skill index) | ≤150 chars description |
+| 1 | Frontmatter only | Always (part of skill index) | ≤250 chars description |
 | 2 | SKILL.md body | On trigger (user invokes skill) | ≤500 lines / ~2,000 words |
 | 3 | `references/`, `agents/`, `templates/` | On demand (specific section needs it) | No hard limit, but keep files focused |
 
@@ -235,7 +252,7 @@ Keep in SKILL.md when:
 | Simple action (github-sync, init-db) | 50-80 lines | 0 files | github-sync |
 | Review lens (test-review, security-review) | 200-280 lines | 2-6 files | test-review |
 | Meta-orchestrator (meta-execute, meta-review) | 300-500 lines | 2-3 agent prompts | meta-execute |
-| Driver skill (codex, vibe, gemini) | 100-200 lines | 0-1 files | codex |
+| Driver skill (copilot) | 100-200 lines | 0-1 files | copilot |
 
 ## Severity Levels (Review Lenses)
 

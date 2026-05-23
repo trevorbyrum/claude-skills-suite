@@ -9,7 +9,7 @@
 |---|------|-------|--------|-------|-------|
 | 1 | Trim all skill descriptions to ≤150 chars | claude | open | 2026-03-07 | Prevent silent skill exclusion from description budget |
 | 2 | Make 7 review skills thin wrappers with shared logic | claude | open | 2026-03-07 | Reduce duplication; shared output format, severity, dispatch |
-| 2a | Troubleshoot Codex/Gemini in subagents | claude | open | 2026-03-11 | Codex: likely stale CLI templates (prompt-before-flags, bare `timeout`, outdated `app server` assumption), not a missing daemon. Gemini: still timing out in subagents. Both worked interactively but fail in background/subagent shells. |
+| 2a | Troubleshoot Codex in subagents | claude | open | 2026-03-11 | Codex MCP usage in subagents — likely stale CLI templates issue. Gemini portion obsolete (driver removed 2026-05-20). |
 | 2b | Add project docs (cnotes, features, todo) to meta-init scaffold | claude | open | 2026-03-11 | meta-init should create these files during project init |
 | 2c | Auto-update Homelab Tools memory after github-sync, meta-execute, and research | claude | done | 2026-03-11 | Cross-cutting rule 7 added. Inline steps in github-sync, meta-execute, research-execute, meta-deep-research-execute. |
 
@@ -21,11 +21,11 @@
 | 4 | Deep research: meta-production skill upgrade | claude | done | 2026-03-11 | 004D complete — 127 cited, 11 sub-questions, 6 contested. Apply next. |
 | 4a | Connect SonarQube MCP | claude | done | 2026-03-11 | Swapped npm→official Docker image `mcp/sonarqube`. Connection verified (0 projects, fresh install). Token in Vault services/sonarqube. |
 | 4b | Update meta-review Phase 1 with SAST integration | claude | done | 2026-03-11 | Phase 1.5 added: Semgrep MCP + SonarQube MCP + local CLIs (ruff/biome/oxlint/gitleaks). Results injected into all lens prompts. |
-| 4c | meta-execute multi-model pipeline | claude | done | 2026-03-12 | Cross-model Best-of-2 (Vibe+Cursor) + 5-reviewer panel (Codex+Sonnet+Cursor+Copilot+Gemini). Needs real-project validation. |
-| 4d | Validate Vibe/Cursor limits on real project | claude | open | 2026-03-12 | Running at conservative 2+2; may raise to 3+3 after testing |
+| 4c | meta-execute multi-model pipeline | claude | done | 2026-03-12 | Originally cross-model Best-of-2 (Vibe+Cursor) + 5-reviewer panel; simplified 2026-05-20 to single Codex MCP generation + 3-4 reviewer panel (Codex review+fix, Sonnet rubric, Sonnet architecture, optional Copilot). Needs real-project validation. |
+| 4d | Validate Codex MCP slot saturation on real project | claude | open | 2026-05-20 | Codex MCP 5 concurrent — confirm wave saturation (typical 2 generating + 2 reviewing) under load. |
 | 4e | Write ui-design SKILL.md + wire as 8th lens in meta-review | claude | open | 2026-03-12 | Directory scaffolded (Mar 11) but SKILL.md never written. User confirmed it was intended. |
 | 5 | Add fresh-findings reuse to all review skills | claude | open | 2026-03-07 | Stop duplicate scans (<24h check) |
-| 6 | Add Gemini to project-questions | claude | open | 2026-03-07 | Domain/competitor research before interview |
+| 6 | Add Sonnet WebSearch subagent to project-questions | claude | done | 2026-05-20 | Domain/competitor research before interview (was originally a Gemini task; ported to Sonnet WebSearch when Gemini driver was removed) |
 | 7 | Add Opus subagent for meta-review synthesis | claude | open | 2026-03-07 | Better cross-lens pattern detection |
 
 ## P2 — Medium Impact
@@ -41,7 +41,7 @@
 
 | # | Task | Owner | Status | Added | Notes |
 |---|------|-------|--------|-------|-------|
-| 12 | Add Gemini to release-prep and meta-production | claude | open | 2026-03-07 | Competitive context, marketing copy |
+| 12 | Add Sonnet WebSearch subagent to release-prep and meta-production | claude | done | 2026-05-20 | Competitive context, marketing copy, stack research (ported from original Gemini task) |
 | 13 | Add Codex to drift-review | claude | open | 2026-03-07 | Find undocumented code features |
 | 14 | Skill description optimization via skill-creator `run_loop.py` | tbyrum | blocked | 2026-03-11 | Needs skill-creator from Claude Teams |
 | 15 | Store GitHub credentials in Vault (`services/github`) | tbyrum | open | 2026-03-11 | Currently using `gh` keyring auth only |

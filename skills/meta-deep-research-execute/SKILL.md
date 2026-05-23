@@ -1,6 +1,7 @@
 ---
 name: meta-deep-research-execute
-description: "Internal Opus subagent for deep research. Runs ~20 workers across 3 model families with adversarial debate. Never invoke directly — dispatched by /meta-deep-research."
+description: "Internal Opus subagent for deep research. Runs ~20 workers across Opus / Sonnet / Codex with adversarial debate. Never invoke directly — dispatched by /meta-deep-research."
+user-invocable: false
 ---
 
 # meta-deep-research-execute
@@ -18,7 +19,7 @@ and writes the final summary.
 
 **Deep research target: 1000+ sources scanned.**
 
-Every connector subagent and external CLI worker must track sources. The
+Every connector subagent and external worker must track sources. The
 orchestrator aggregates counts after Phase 2 and again after any addendum
 cycles. The final summary header reports the total.
 
@@ -36,7 +37,7 @@ scope, project context, and output configuration.
 All intermediate files use 3-4 word kebab-case names that describe the content:
 - `websocket-scaling-limits.md` (not `codex-worker-1.md`)
 - `rag-accuracy-benchmarks.md` (not `sonnet-connector-3.md`)
-- `dynamo-failure-stories.md` (not `gemini-contradictions.md`)
+- `dynamo-failure-stories.md` (not `web-grounding-contradictions.md`)
 
 The filename should tell you what's inside without opening it.
 
@@ -46,7 +47,7 @@ The filename should tell you what's inside without opening it.
 
 Validate and refine the sub-questions from the dispatcher. Classify each by
 evidence type (Academic, Technical, Market, Reasoning). Assign each sub-question
-to 2-3 model families ensuring cross-coverage. Write the dispatch table to the
+to 2-3 models ensuring cross-coverage. Write the dispatch table to the
 artifact DB:
 ```bash
 source artifacts/db.sh
@@ -67,9 +68,9 @@ Launch all 4 tracks simultaneously:
 - **Track C — Codex Technical Validation** (up to 4 workers): Workers 1-3 do
   primary technical research. Worker 4 runs devil's advocate (find evidence
   AGAINST conventional wisdom). Slot 5 reserved for Phase 2.5/3.
-- **Track D — Gemini Web Grounding** (2 instances): Instance 1 does broad
-  Google Search research + case studies. Instance 2 hunts contradictions.
-  Phase 2.5/3 Gemini runs AFTER Track D completes (sequential).
+- **Track D — Sonnet Web Grounding** (2 subagents): Sonnet subagents with
+  WebSearch tools. Subagent 1 does broad web research + case studies.
+  Subagent 2 hunts contradictions. Both write findings directly to the DB.
 
 All workers include a Source Tally in their output. After completion, aggregate
 all tallies and store:
@@ -83,10 +84,10 @@ db_upsert 'meta-deep-research-execute' 'source-tally' '{NNN}D' "$TALLY_CONTENT"
 This phase ALWAYS runs. It is not optional or conditional. Initial research
 inevitably surfaces topics and alternatives not in the original prompt.
 
-**Step 1 — Coverage Debate:** Opus + Codex reviewers run in parallel. Gemini
-reviewer runs AFTER Track D completes (respects 2-session limit). Each reads
-the original prompt, dispatch table, all findings, and the source tally. They
-identify:
+**Step 1 — Coverage Debate:** Three reviewers run in parallel: an Opus
+subagent, a Sonnet subagent with WebSearch, and a Codex MCP worker. Each
+reads the original prompt, dispatch table, all findings, and the source
+tally. They identify:
 - Thin evidence areas needing reinforcement
 - Emergent topics that surfaced during research
 - Missing well-known approaches/tools
@@ -94,8 +95,8 @@ identify:
 - Source count gaps vs. 1000+ target
 
 Output stored in artifact DB:
-- `meta-deep-research-execute` / `coverage-review` / `{NNN}D/claude`
-- `meta-deep-research-execute` / `coverage-review` / `{NNN}D/gemini`
+- `meta-deep-research-execute` / `coverage-review` / `{NNN}D/opus`
+- `meta-deep-research-execute` / `coverage-review` / `{NNN}D/sonnet`
 - `meta-deep-research-execute` / `coverage-review` / `{NNN}D/codex`
 
 **Step 2 — Addendum Creation:** A fresh Opus subagent (not a prior participant)
@@ -115,14 +116,18 @@ All debate outputs go to the artifact DB under
 `meta-deep-research-execute` / `debate` / `{NNN}D/{file-stem}`.
 The debate covers ALL findings (original + addendum).
 
-- **Round 1 — Present:** Each model family (Claude/Codex/Gemini) compiles its
-  findings into a position paper. Per sub-question: claim, evidence, confidence,
-  gaps. DB label: `{NNN}D/position-{model}`
+Three "models" participate: Opus (Anthropic high reasoning), Sonnet
+(Anthropic balanced + WebSearch), Codex (OpenAI technical).
+
+- **Round 1 — Present:** Each model compiles its findings into a position
+  paper. Per sub-question: claim, evidence, confidence, gaps. DB label:
+  `{NNN}D/position-{opus|sonnet|codex}`
 - **Round 2 — Challenge:** Each model reads the OTHER two positions and attacks
   them (insufficient evidence, wrong details, contradictions, hallucinations).
-  DB label: `{NNN}D/challenge-{model}`
+  DB label: `{NNN}D/challenge-{opus|sonnet|codex}`
 - **Round 3 — Respond + Converge:** Each model responds to challenges with
-  CONCEDE / REBUT / ESCALATE per claim. DB label: `{NNN}D/response-{model}`
+  CONCEDE / REBUT / ESCALATE per claim. DB label:
+  `{NNN}D/response-{opus|sonnet|codex}`
 
 ### Phase 4: Convergence Scoring
 
@@ -184,13 +189,12 @@ deep research summary in Qdrant. Per cross-cutting rule 7:
 
 ## Error Handling
 
-- **Gemini unavailable**: Try Copilot as fallback for Track D (same 2-slot
-  limit, same prompt patterns). If both fail, use WebSearch. Debate becomes 2-model.
-- **Codex unavailable**: Redistribute to Sonnet. Debate becomes 2-model.
-- **Both Gemini+Copilot unavailable**: WebSearch for Track D. Debate becomes 2-model.
-- **All CLIs unavailable**: Claude only + self-consistency (3 Sonnet subagents).
-  Note "single-model" in methodology.
-- **Subagent/debate failure**: Note gap, mark affected claims UNCERTAIN.
+- **Codex unavailable**: Redistribute to Sonnet. Debate becomes 2-model
+  (Opus + Sonnet). Note "Codex unavailable" in methodology.
+- **WebSearch unavailable** (Track D fallback): Sonnet subagents do
+  inference-only synthesis from training data. Flag findings as
+  "inference-only, no fresh sources."
+- **All workers fail in a track**: Note gap, mark affected claims UNCERTAIN.
   Proceed with available responses.
 - **Coverage review failure**: Proceed with available reviews. If ALL fail,
   write minimal addendum targeting source count gaps only.
@@ -200,11 +204,11 @@ deep research summary in Qdrant. Per cross-cutting rule 7:
 ## Cost Awareness
 
 ~17 workers + mandatory coverage expansion + addendum workers + 3 debate rounds.
-Up to 5 Opus subagents, 8-10+ Sonnet subagents, 4 Codex workers (max 5 concurrent),
-2 Gemini instances (max 2 concurrent), plus 9 debate exchanges. Gemini and Codex
-phases run sequentially when needed to respect hard concurrency limits. Reserve
-for decisions where being wrong costs more than the research.
+Up to 5 Opus subagents, 10-12+ Sonnet subagents, 4 Codex workers (max 5 concurrent),
+plus 9 debate exchanges. Codex phases run sequentially when needed to respect
+the 5-slot concurrency limit. Reserve for decisions where being wrong costs more
+than the research.
 
 ---
 
-Before completing, read and follow `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/cross-cutting-rules.md`.

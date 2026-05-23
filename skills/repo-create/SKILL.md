@@ -1,6 +1,7 @@
 ---
 name: repo-create
 description: Creates or connects a GitHub repo for the current project. Use when no remote origin exists, or to change repo visibility. Asks before acting.
+disable-model-invocation: true
 ---
 
 # repo-create
@@ -113,4 +114,4 @@ Action: Check if git is initialized and remote exists. If not, ask the
 
 ## Cross-cutting
 
-Before completing, read and follow `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/cross-cutting-rules.md`.

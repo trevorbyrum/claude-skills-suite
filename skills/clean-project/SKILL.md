@@ -1,6 +1,7 @@
 ---
 name: clean-project
 description: Audits and tidies project structure for agent-optimal navigation. Detects duplicate DBs, orphaned files, config scatter, naming drift, and bloat. Proposes then executes approved changes safely.
+disable-model-invocation: true
 ---
 
 # Clean Project
@@ -353,4 +354,4 @@ Action: Full pipeline — audit, plan, execute approved changes.
 
 ---
 
-Before completing, read and follow `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/cross-cutting-rules.md`.

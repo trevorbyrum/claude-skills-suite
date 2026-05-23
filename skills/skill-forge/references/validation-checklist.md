@@ -7,11 +7,11 @@ Reference for skill-forge. Validate every skill against this checklist before fi
 | # | Check | Severity | How to Detect |
 |---|-------|----------|---------------|
 | F1 | `name` matches directory name | FAIL | Compare `name:` field to parent directory |
-| F2 | `description` ≤ 150 characters | FAIL | `wc -c` on the description value |
+| F2 | `description` ≤ 250 characters | FAIL | `wc -c` on the description value |
 | F3 | Description uses third person | WARN | Starts with verb ("Evaluates", "Commits"), not imperative ("Evaluate", "Commit") |
 | F4 | Description includes trigger phrases | WARN | Contains "Use when", "Invoke with", or natural trigger words |
 | F5 | No always-on language in description | FAIL | Flag: "Runs after", "Triggers whenever", "Applies when", "Automatically" — these cause infinite loops |
-| F6 | No extra frontmatter fields | WARN | Only `name`, `description`, `argument-hint` are valid |
+| F6 | No unrecognized frontmatter fields | WARN | Valid fields: `name`, `description`, `argument-hint`, `disable-model-invocation`, `user-invocable`, `allowed-tools`, `model`, `effort`, `context`, `agent`, `hooks`, `paths`, `shell` |
 
 ## Structure Checks
 
@@ -44,10 +44,10 @@ Reference for skill-forge. Validate every skill against this checklist before fi
 |---|-------------|----------|-----------------|
 | A1 | **Stale file references** | FAIL | Outputs says `db_upsert` but instructions say "Write to the output file" — causes .md file writes instead of DB writes |
 | A2 | **Subagent DB writes** | FAIL | Instructions tell subagents to call `db_upsert` — subagents don't have access to `artifacts/db.sh`. Main thread must handle all DB writes |
-| A3 | **Inlined CLI commands** | FAIL | Skill embeds Codex/Gemini/Vibe/Cursor/Copilot CLI flags, paths, or syntax instead of referencing the driver skill. Violates driver skill boundary |
-| A4 | **Hardcoded CLI paths** | FAIL | Uses `/opt/homebrew/bin/codex` instead of dynamic discovery from driver skill |
-| A5 | **Bare `timeout` command** | FAIL | Must use `$GTIMEOUT` (absolute path `/opt/homebrew/bin/gtimeout`). Bare `timeout` resolves to perl alarm wrapper in subagent shells, breaks Gemini |
-| A6 | **Line-count output validation** | WARN | Validating CLI output by `wc -l` instead of `wc -c`. Gemini produces few very long lines (5-10 lines, 500-2000+ chars each) |
+| A3 | **Inlined raw CLI commands** | FAIL | Skill embeds raw Codex/Copilot CLI flags, paths, or syntax instead of using Codex MCP or the `/copilot` driver skill. Violates driver boundary |
+| A4 | **Hardcoded CLI paths** | FAIL | Uses paths such as `/opt/homebrew/bin/codex` instead of Codex MCP or dynamic discovery from the relevant driver skill |
+| A5 | **Bare `timeout` command** | FAIL | Must use `$GTIMEOUT` (absolute path `/opt/homebrew/bin/gtimeout`). Bare `timeout` resolves to perl alarm wrapper in subagent shells, breaks long-running CLIs |
+| A6 | **References to removed drivers** | FAIL | Mentions Gemini, Cursor, or Vibe CLIs / driver skills — those have been removed. Replace with Codex MCP or a Sonnet subagent |
 | A7 | **Always-on skill description** | FAIL | Description reads as standing instruction ("Runs after X", "Triggers when Y") — causes other agents to loop. Must use explicit invocation language |
 | A8 | **Missing fresh-findings check** | WARN | Review lenses should check `db_age_hours` before re-running a scan to avoid duplicate work within 24h |
 | A9 | **Cross-cutting footer missing** | FAIL | Every skill must end with the cross-cutting rules reference |
@@ -63,15 +63,16 @@ Reference for skill-forge. Validate every skill against this checklist before fi
 | D4 | Standalone + multi-model labels documented | WARN | Review lenses that participate in meta-review |
 | D5 | No `db_upsert` in subagent prompts | FAIL | DB writes must happen in main thread |
 
-## Driver Skill Boundary Checks
+## Driver Boundary Checks
 
 | # | Check | Severity | When Applies |
 |---|-------|----------|--------------|
-| B1 | CLI invocation references driver skill | FAIL | Any skill dispatching Codex/Gemini/Vibe/Cursor/Copilot |
-| B2 | No embedded CLI flags or syntax | FAIL | Consuming skills specify task type + prompt + output path only |
-| B3 | No auth/path setup inline | FAIL | Driver skill handles path discovery |
-| B4 | No timeout syntax inline | FAIL | Driver skill handles `$GTIMEOUT` wrapping |
-| B5 | Fallback behavior specified | WARN | What happens if the CLI is unavailable |
+| B1 | Codex invocation uses `codex-mcp` tools | FAIL | Any skill dispatching Codex |
+| B2 | Non-Codex CLI invocation references driver skill | FAIL | Any skill dispatching Copilot must reference `/copilot` |
+| B3 | No embedded raw CLI flags or syntax | FAIL | Consuming skills specify task type + prompt + output destination only |
+| B4 | No auth/path setup inline | FAIL | Codex MCP or driver skill handles path discovery |
+| B5 | No shell timeout syntax for Codex | FAIL | Codex calls use MCP `timeout_sec`; other drivers own timeout syntax |
+| B6 | Fallback behavior specified | WARN | What happens if the external agent is unavailable |
 
 ## Progressive Disclosure Checks
 
@@ -87,7 +88,7 @@ Reference for skill-forge. Validate every skill against this checklist before fi
 
 | # | Check | Severity | When Applies |
 |---|-------|----------|--------------|
-| I1 | Respects CLI concurrency limits | FAIL | Codex: 5, Vibe: 3, Cursor: 3, Gemini: 2, Copilot: 2 |
+| I1 | Respects CLI concurrency limits | FAIL | Codex MCP: 5, Copilot: 2, Sonnet subagents: no hard limit |
 | I2 | Uses `run_in_background: true` for parallel CLI calls | WARN | Skills that dispatch multiple CLI workers |
 | I3 | No sleep+poll loops | FAIL | Must use `run_in_background` + notification, not sleep+check |
 | I4 | Timeout values specified for all CLI calls | WARN | 120s research/review, 180s generation, 300s complex |
@@ -97,7 +98,7 @@ Reference for skill-forge. Validate every skill against this checklist before fi
 - Skill directories: `lowercase-hyphenated` (e.g., `test-review`, `meta-execute`)
 - Review lenses: `*-review` suffix (e.g., `security-review`, `completeness-review`)
 - Meta-skills: `meta-*` prefix (e.g., `meta-init`, `meta-review`)
-- Driver skills: bare CLI name (e.g., `codex`, `gemini`, `vibe`)
+- Driver skills: bare CLI name (e.g., `copilot`)
 - Action skills: verb or verb-noun (e.g., `github-sync`, `init-db`, `release-prep`)
 
 ## Validation Summary Format

@@ -4,7 +4,7 @@ A production skill suite for [Claude Code](https://docs.anthropic.com/en/docs/cl
 
 ## What This Does
 
-Instead of using Claude Code as a single-model assistant, this suite turns it into an **orchestration layer** that delegates work across 6 AI models (Claude, Codex, Gemini, Cursor, Copilot, Vibe/Mistral), runs parallel review panels, and enforces quality gates before anything ships.
+Instead of using Claude Code as a single-model assistant, this suite turns it into an **orchestration layer** that delegates work across Claude (Opus + Sonnet subagents), Codex MCP, and Copilot, runs parallel review panels, and enforces quality gates before anything ships.
 
 ```
 You say: "Initialize a new project"
@@ -12,13 +12,13 @@ Claude runs: /meta-init
   → Scaffolds project structure
   → Interviews you about goals and constraints
   → Writes project-context.md (the cold-start doc)
-  → Fans out research across Gemini + Codex + web sources
+  → Fans out research across Sonnet WebSearch subagents + Codex MCP + connector MCPs
   → Produces an approved build plan with dependency-ordered work units
 
 You say: "Build it"
 Claude runs: /meta-execute
-  → Generates code via Vibe + Cursor (cross-model Best-of-2)
-  → Reviews each unit with a 5-model panel (Codex + Sonnet + Cursor + Copilot + Gemini)
+  → Generates code via Codex MCP (one candidate per work unit)
+  → Reviews each unit with a 3-4 reviewer panel (Codex MCP review+fix, Sonnet rubric, Sonnet architecture, optional Copilot)
   → Merges passing units wave-by-wave with review gates between each wave
   → You approve each wave before the next one starts
 
@@ -40,15 +40,14 @@ Claude runs: /meta-production
               ┌─────────────────────┼─────────────────────┐
               ▼                     ▼                     ▼
    ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
-   │  Atomic Skills    │  │  Review Lenses    │  │  Driver Skills    │
-   │  (21 skills)      │  │  (8 skills)       │  │  (5 skills)       │
-   │                   │  │                   │  │                   │
-   │  scaffold, plan,  │  │  security, test,  │  │  codex, gemini,   │
-   │  research, build, │  │  counter, drift,  │  │  vibe, cursor,    │
-   │  sync, release... │  │  refactor, comp-  │  │  copilot           │
-   │                   │  │  leteness, comp-  │  │                   │
-   │                   │  │  liance, browser  │  │  CLI syntax &     │
-   │                   │  │                   │  │  path discovery   │
+   │  Atomic Skills    │  │  Review Lenses    │  │  Workers          │
+   │  (21 skills)      │  │  (8 skills)       │  │                   │
+   │                   │  │                   │  │  Codex MCP        │
+   │  scaffold, plan,  │  │  security, test,  │  │  broker           │
+   │  research, build, │  │  counter, drift,  │  │  /copilot driver  │
+   │  sync, release... │  │  refactor, comp-  │  │  Sonnet subagents │
+   │                   │  │  leteness, comp-  │  │  (Agent tool with │
+   │                   │  │  liance, browser  │  │   WebSearch)      │
    └──────────────────┘  └──────────────────┘  └──────────────────┘
               │                     │                     │
               └─────────────────────┼─────────────────────┘
@@ -137,42 +136,38 @@ Each lens runs standalone or as part of `/meta-review`:
 | `/quick-plan` | Lightweight in-session planning |
 | `/sync-skills` | Inject missing or stale template files into projects |
 
-### Driver Skills (CLI Adapters)
+### Driver Interfaces
 
-These encode the exact syntax, path discovery, and gotchas for each external CLI so consuming skills don't have to:
+These encode the exact syntax, path discovery, and gotchas for each external agent so consuming skills don't have to:
 
-| Skill | CLI | Model |
+| Interface | Backend | Model |
 |-------|-----|-------|
-| `/codex` | OpenAI Codex CLI | GPT-5.4 |
-| `/gemini` | Google Gemini CLI | Gemini 2.5 |
-| `/vibe` | Mistral Vibe CLI | Devstral-2 |
-| `/cursor` | Cursor Agent CLI | Configurable (default: Sonnet 4.6 Thinking) |
-| `/copilot` | GitHub Copilot CLI | Configurable (default: Sonnet 4.5) |
+| `codex-mcp` MCP tools | OpenAI Codex CLI via local broker | Subscription-backed Codex |
+| `/copilot` skill | GitHub Copilot CLI | Configurable (default: Sonnet 4.5) |
+| Sonnet subagents (Agent tool) | Claude runtime — no external CLI | Sonnet 4.6 |
 
 ## Multi-Model Orchestration
 
 The suite treats AI models as specialized workers, not interchangeable commodities:
 
-| Role | Models Used | Why |
+| Role | Worker | Why |
 |------|------------|-----|
 | **Orchestration** | Claude (Opus) | Architecture decisions, synthesis, final calls |
-| **Code generation** | Vibe (Mistral) + Cursor | Cross-model diversity beats same-model N>1 |
-| **Code review + fix** | Codex | Only reviewer that applies fixes in-place |
-| **Read-only review** | Sonnet, Cursor, Copilot, Gemini | Different perspectives, no write access |
-| **Web research** | Gemini | Web grounding for current best practices |
-| **Fast generation** | Vibe | Fastest for single-file, scoped tasks |
+| **Code generation** | Codex MCP `generate` | Single dedicated coder; diversity comes from the reviewer panel |
+| **Code review + fix** | Codex MCP `generate` (review prompt) | Only reviewer that applies fixes in-place |
+| **Rubric / architecture review** | Sonnet subagents (Agent tool) | Independent perspectives, no write access |
+| **Web research / devil's advocate** | Sonnet subagents with WebSearch | Current sources + adversarial framing |
+| **Different-model perspective** | Copilot (optional) | Cross-vendor sanity check |
 
 ### Concurrency Limits
 
 Hard limits enforced across all skills:
 
-| CLI | Max Concurrent |
+| Worker | Max Concurrent |
 |-----|---------------|
-| Codex | 5 |
-| Vibe | 3 |
-| Cursor | 3 |
-| Gemini | 2 |
+| Codex MCP | 5 |
 | Copilot | 2 |
+| Sonnet subagents | no hard limit (managed by Claude runtime) |
 
 ## Artifact Store
 
@@ -222,13 +217,12 @@ The suite works with Claude alone, but multi-model features require external CLI
 
 | CLI | Install | Used For |
 |-----|---------|----------|
-| [Codex](https://github.com/openai/codex) | `npm install -g @openai/codex` | Review+fix, code generation |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `npm install -g @google/gemini-cli` | Web research, architecture review |
-| [Vibe](https://github.com/mistralai/vibe) | `pip install vibe-cli` | Fast code generation |
-| [Cursor](https://www.cursor.com/) | Cursor Pro+ desktop app | Generation, review |
-| [Copilot](https://github.com/github/copilot-cli) | `npm install -g @githubnext/github-copilot-cli` | Review, multi-model tasks |
+| Codex via `codex-mcp` | Register `/Users/byrum_work/Projects/mcp-servers/codex-mcp` with Claude Code | Review+fix, code generation |
+| [Copilot](https://github.com/github/copilot-cli) | `npm install -g @githubnext/github-copilot-cli` | Optional 4th reviewer, different-model perspective |
 
-All CLIs are optional — skills gracefully degrade when a CLI is unavailable, falling back to Claude subagents.
+All CLIs are optional — skills gracefully degrade when a CLI is unavailable, falling back to Sonnet subagents.
+
+> **Removed (2026-05-20)**: The previous Gemini, Cursor, and Vibe driver skills were removed. Anywhere they were used, the suite now dispatches a Sonnet subagent (research, devil's advocate, web grounding via WebSearch) or Codex MCP (code generation, review+fix).
 
 ## Creating New Skills
 
@@ -246,7 +240,7 @@ See [skills/skill-forge/references/skill-template.md](skills/skill-forge/referen
 ├── skills/                    # 42 skill directories, each with SKILL.md
 │   ├── meta-*/                # Orchestrators
 │   ├── *-review/              # Review lenses (+ references/)
-│   ├── codex/ gemini/ etc.    # Driver skills
+│   ├── copilot/               # CLI driver skill (Copilot only; Codex is MCP-first)
 │   └── skill-forge/           # Skill creation/editing tool
 ├── agents/                    # 10 specialized subagent definitions
 ├── hooks/                     # 7 lifecycle hooks (session, commit, compact)

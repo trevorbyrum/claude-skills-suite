@@ -151,4 +151,4 @@ User: "Add correlation IDs to our API"
 
 ---
 
-Before completing, read and follow `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/cross-cutting-rules.md`.

@@ -187,8 +187,8 @@ If they choose 3, confirm and exit.
 - If the user already has some phases done (e.g., scaffold exists, repo
   exists), detect this and skip completed phases. Confirm with the user:
   "Scaffold already exists — skipping to Phase 3. OK?"
-- If Gemini CLI is unavailable during research phases, fall back to Claude
-  WebSearch per the gemini skill's fallback rules.
+- If Codex MCP is unavailable during research phases, fall back to Sonnet
+  subagents with WebSearch for web grounding.
 
 ### Timeout Guards
 
@@ -227,4 +227,4 @@ Action: Detect existing scaffold and repo. Confirm skip. Start at Phase 3
 
 ---
 
-Before completing, read and follow `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/cross-cutting-rules.md`.

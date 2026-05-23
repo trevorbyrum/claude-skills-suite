@@ -1,6 +1,7 @@
 ---
 name: counter-review
 description: Adversarial red-team review. Attacks architecture, completeness, drift, over-engineering, abuse cases, attack chains, and failure scenarios. Cross-references code against docs.
+disable-model-invocation: true
 ---
 
 # Counter-Review
@@ -249,4 +250,4 @@ User: An AI agent handles user requests in this app. Poke holes in it.
 
 ---
 
-Before completing, read and follow `../references/review-lens-framework.md` and `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/review-lens-framework.md` and `references/cross-cutting-rules.md`.

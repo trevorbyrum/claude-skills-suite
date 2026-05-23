@@ -1,6 +1,7 @@
 ---
 name: completeness-review
 description: Scans for stubs, TODOs, placeholders, empty bodies, and unfinished code. Use before deployment or marking anything "done," especially after LLM-assisted builds.
+disable-model-invocation: true
 ---
 
 # Completeness Review
@@ -164,4 +165,4 @@ User: Scan for TODOs and placeholders before we ship.
 
 ---
 
-Before completing, read and follow `../references/review-lens-framework.md` and `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/review-lens-framework.md` and `references/cross-cutting-rules.md`.

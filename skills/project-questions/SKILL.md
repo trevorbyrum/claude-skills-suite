@@ -27,21 +27,24 @@ until the project is well-defined enough to plan against.
 
 ## Instructions
 
-### Phase 0: Domain Research (Gemini)
+### Phase 0: Domain Research (Sonnet subagent with WebSearch)
 
 Before interviewing the user, ground yourself in the project's domain:
 
-1. Load `/gemini` for invocation syntax.
-2. If available, run domain research using the `/gemini` Research / Analysis
-   template with a 120s timeout. Do **not** force `@generalist_agent` in
-   automation.
-   Prompt: `"Research the domain of [PROJECT_DESCRIPTION]. Cover: key terminology,
-   common patterns, existing solutions, market landscape, and common pitfalls.
-   Be specific and practical — this will inform a project interview."`.
-3. Use the research output to ask better, more informed questions during the interview. Reference specific domain knowledge to surface assumptions the user might not think to mention.
-4. If Gemini is unavailable or fails, retry with Copilot — load `/copilot`
-   for invocation syntax. Same prompt, 120s timeout.
-5. If both Gemini and Copilot fail, proceed without domain research — the interview still works, just with less domain grounding.
+1. Spawn a Sonnet subagent (`subagent_type: "general-purpose"`) with
+   WebSearch tool access.
+2. Prompt: `"You have WebSearch. Research the domain of [PROJECT_DESCRIPTION].
+   Cover: key terminology, common patterns, existing solutions, market
+   landscape, and common pitfalls. Cite URLs. Be specific and practical —
+   this will inform a project interview."` Wait for the subagent to return.
+3. Use the research output to ask better, more informed questions during
+   the interview. Reference specific domain knowledge to surface assumptions
+   the user might not think to mention.
+4. If the Sonnet subagent can't access WebSearch (or returns nothing useful),
+   retry with Copilot — load `/copilot` for invocation syntax. Same prompt,
+   120s timeout.
+5. If both fail, proceed without domain research — the interview still
+   works, just with less domain grounding.
 
 1. **Open with a summary.** Restate what you understood from the user's
    description in 2-3 sentences. Ask "Is this accurate, or am I off?" This
@@ -110,7 +113,8 @@ confirmed the summary.
 
 ```
 User: "I want to build a dashboard for my homelab"
-Action: Gemini-ground "homelab dashboard" domain. Restate understanding. Then
+Action: WebSearch-ground "homelab dashboard" domain via Sonnet subagent.
+        Restate understanding. Then
         dig: What services? Who uses it — just you? Real-time or polling?
         Mobile-friendly? What's wrong with existing dashboards (Heimdall,
         Homer, Homarr)? Keep going until the vision is concrete.
@@ -118,7 +122,7 @@ Action: Gemini-ground "homelab dashboard" domain. Restate understanding. Then
 
 ```
 User: "Let's plan a CLI tool for managing dotfiles"
-Action: Gemini-ground "dotfiles manager CLI" domain. Ask: Which OS? Symlinks
+Action: WebSearch-ground "dotfiles manager CLI" via Sonnet subagent. Ask: Which OS? Symlinks
         or copies? Templating? How is it different from chezmoi/stow/yadm?
         What's the install story? Challenge: "If stow already does this, what
         specifically does it get wrong for you?"
@@ -133,4 +137,4 @@ Action: Immediately ask what the product does — "SaaS" is a business model,
 
 ## Cross-cutting
 
-Before completing, read and follow `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/cross-cutting-rules.md`.

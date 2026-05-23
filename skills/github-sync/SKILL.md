@@ -61,4 +61,4 @@ Derive commit message from the session's work context. Stage, commit, push. Retu
 
 ---
 
-Before completing, read and follow `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/cross-cutting-rules.md`.

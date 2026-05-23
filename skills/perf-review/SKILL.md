@@ -1,6 +1,7 @@
 ---
 name: perf-review
 description: Scans for N+1 queries, missing indexes, memory leaks, O(n²) loops, caching gaps, and DB query issues. Use before deploys or after implementation sprints.
+disable-model-invocation: true
 ---
 
 # Performance Review
@@ -214,4 +215,4 @@ User: We're about to scale from 100 to 10,000 users. What will break?
 
 ---
 
-Before completing, read and follow `../references/review-lens-framework.md` and `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/review-lens-framework.md` and `references/cross-cutting-rules.md`.

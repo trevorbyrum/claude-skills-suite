@@ -53,4 +53,4 @@ Warn user: "You have uncommitted changes. Stash them (`--stash`), commit first (
 
 ---
 
-Before completing, read and follow `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/cross-cutting-rules.md`.

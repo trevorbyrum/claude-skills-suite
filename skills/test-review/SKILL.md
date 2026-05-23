@@ -1,6 +1,7 @@
 ---
 name: test-review
 description: Evaluates test coverage, quality, and gaps. Catches LLM tendencies to skip or stub tests. Reviews strategy against features.md to ensure critical paths are covered.
+disable-model-invocation: true
 ---
 
 # Test Review
@@ -256,4 +257,4 @@ User: We're about to merge the auth feature. Review the tests for it.
 
 ---
 
-Before completing, read and follow `../references/review-lens-framework.md` and `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/review-lens-framework.md` and `references/cross-cutting-rules.md`.

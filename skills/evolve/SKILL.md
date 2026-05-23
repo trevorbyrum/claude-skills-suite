@@ -31,12 +31,12 @@ Parse the user's argument:
 
 3. **Edit sections in place.** Update affected fields directly so the body shows current truth. Keep same structure and formatting — change values, not layout.
 
-4. **Build changelog entry.** Read format from `../../references/evolve-context-diff.md`. For each changed field:
+4. **Build changelog entry.** Read format from `references/evolve-context-diff.md`. For each changed field:
    - Field changes: `**[Section]: [Field]**: "[old]" -> "[new]"`
    - Key Decision added/changed/removed: note row number and content
    - Reason: one line explaining why
 
-5. **Insert changelog at top** (newest first, append-only). Use today's date and platform (`CLAUDE`/`CODEX`/`GEMINI`/`COPILOT`).
+5. **Insert changelog at top** (newest first, append-only). Use today's date and platform (`CLAUDE`/`CODEX`/`COPILOT`).
 
 6. **Verify completeness.** Every changed field in the body must have a corresponding "was → now" line. Missing entries = lost history.
 
@@ -55,7 +55,7 @@ Parse the user's argument:
    - Adjust scope descriptions
    - Move work between phases if sequencing changed
 
-4. **Build changelog entry.** Read format from `../../references/evolve-plan-diff.md`. For each change:
+4. **Build changelog entry.** Read format from `references/evolve-plan-diff.md`. For each change:
    - Completed: `[work unit] — [brief outcome]`
    - Added: `[work unit] — [why needed]`
    - Changed: `[work unit] — "[old]" -> "[new]"`
@@ -162,4 +162,4 @@ units, update dependencies. Flag if other features depended on it.
 
 ---
 
-Before completing, read and follow `../../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/cross-cutting-rules.md`.

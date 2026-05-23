@@ -1,6 +1,7 @@
 ---
 name: meta-deep-research
 description: "Multi-model deep research with adversarial debate. Dispatches Opus to orchestrate ~20 workers across 3 model families. Triggers on deep research, exhaustive research, leave no stone unturned."
+disable-model-invocation: true
 ---
 
 # meta-deep-research
@@ -44,16 +45,21 @@ sections relevant to the research question — compress to essentials only.
 
 ### Step 3: Determine Folder Number
 
-Check the `artifacts/research/` directory for existing numbered folders. Both regular
-research (`001`, `002`) and deep research (`001D`, `002D`) share one sequence.
+Regular research (`001`, `002`) and deep research (`001D`, `002D`) share one
+numeric sequence. Run this snippet to get the next number:
 
-Examples:
-- No folders exist → `001D`
-- `001` exists → `002D`
-- `001`, `002D` exist → `003D`
-- `001`, `002D`, `003` exist → `004D`
+```bash
+HIGHEST=$(ls artifacts/research/ 2>/dev/null | grep -oE '^[0-9]+' | sort -n | tail -1)
+NNN=$(printf '%03d' $(( ${HIGHEST:-0} + 1 )))
+echo "${NNN}D"
+```
 
-Extract the highest number, increment by 1, append `D`.
+This scans all entries in `artifacts/research/`, extracts leading digits from
+folder names (ignoring `summary/`, loose files, and the `D` suffix), finds the
+highest number, and increments. If the directory is empty or missing, starts at
+`001D`.
+
+**You MUST use this command.** Do not eyeball the folder list or guess the number.
 
 ### Step 4: Create Folder Structure
 
@@ -188,4 +194,4 @@ Action: Set scope to exhaustive. Ask about specific HIPAA areas of concern.
 
 ---
 
-Before completing, read and follow `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/cross-cutting-rules.md`.

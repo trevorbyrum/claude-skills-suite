@@ -1,6 +1,7 @@
 ---
 name: breaking-change-review
 description: Detects breaking API, dependency, and schema changes before they ship. Use before major version bumps, dependency upgrades, or API releases.
+disable-model-invocation: true
 ---
 
 # Breaking Change Review
@@ -179,4 +180,4 @@ User: We're changing the database schema. Is it safe?
 
 ---
 
-Before completing, read and follow `../references/review-lens-framework.md` and `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/review-lens-framework.md` and `references/cross-cutting-rules.md`.

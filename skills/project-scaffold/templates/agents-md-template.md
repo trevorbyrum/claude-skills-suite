@@ -1,12 +1,50 @@
-# {{PROJECT_NAME}} — Codex Instructions
+# {{PROJECT_NAME}}
 
-Read before every task: `project-context.md`, `coterie.md`, `features.md`, `project-plan.md`.
+## Stack
 
-## Rules
+{{STACK_DESCRIPTION}}
 
-- Log all code writes and reviews to `cnotes.md` (structured note format per `coterie.md`)
-- Scan for TODOs, stubs, debug logs, placeholder values before completing any task — fix them
-- Check changes against `project-context.md` and `features.md` — flag discrepancies in `cnotes.md`
+## Commands
+
+{{BUILD_COMMAND}}        # build
+{{TEST_COMMAND}}         # run tests
+{{LINT_COMMAND}}         # lint/format check
+
+## Code Style
+
+- {{LANGUAGE_CONVENTIONS}}
 - No hardcoded secrets — use environment variables with empty-string fallbacks
-- Update `project-context.md` and `project-plan.md` if your work changes architecture or completes milestones (changelog at top, newest first, identify as `CODEX`)
-- Write `artifacts/compact/codex-compact.md` before session ends with current task state
+- Follow existing patterns in the codebase — consistency over personal preference
+
+## Boundaries
+
+ALWAYS:
+
+- Run tests before committing
+- Validate inputs at system boundaries
+- Use parameterized queries for database access
+- Clean up after yourself: no debug logs, no commented-out code, no stubs
+
+ASK FIRST:
+
+- Adding new dependencies
+- Changing database schema
+- Modifying CI/CD pipeline configuration
+
+NEVER:
+
+- Hardcode secrets or credentials
+- Commit .env files or credentials
+- Skip pre-commit hooks (--no-verify)
+- Force push to main/master
+
+## Project Context
+
+See `project-context.md` for architecture decisions and constraints.
+See `project-plan.md` for implementation roadmap.
+See `features.md` for product capabilities.
+
+## Commit Convention
+
+- Format: `type: concise description` (feat, fix, refactor, test, docs, chore)
+- Keep subject line under 72 characters
