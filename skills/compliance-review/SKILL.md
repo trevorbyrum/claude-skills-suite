@@ -1,6 +1,7 @@
 ---
 name: compliance-review
-description: Checks code against documented rules (coterie.md, CLAUDE.md, cross-cutting-rules.md). Use after major changes, before merges, or to verify the codebase follows its own standards.
+description: Checks code against documented rules (CLAUDE.md, AGENTS.md, cross-cutting-rules.md). Use after major changes, before merges, or to verify the codebase follows its own standards.
+disable-model-invocation: true
 ---
 
 # Compliance Review
@@ -9,8 +10,8 @@ description: Checks code against documented rules (coterie.md, CLAUDE.md, cross-
 
 Verify the codebase follows its own documented rules. Most projects accumulate rules
 over time — coding standards, architectural constraints, deployment patterns, naming
-conventions — and store them in files like `coterie.md`, `cross-cutting-rules.md`,
-`CLAUDE.md`, or project-specific configs. This skill extracts every rule from those
+conventions — and store them in files like `CLAUDE.md`, `AGENTS.md`, `cross-cutting-rules.md`,
+or project-specific configs. This skill extracts every rule from those
 files and cross-references them against the actual code to find violations.
 
 The key principle: if a rule isn't explicitly documented, it's not a compliance violation.
@@ -20,9 +21,9 @@ what's written down.
 ## Inputs
 
 - The full codebase
-- `coterie.md` — shared team rules and conventions
-- `cross-cutting-rules.md` — rules that apply across all skills and workflows
 - `CLAUDE.md` — project-root Claude instructions (if exists)
+- `AGENTS.md` — agent-facing rules and conventions (if exists)
+- `cross-cutting-rules.md` — rules that apply across all skills and workflows
 - `project-context.md` — project-specific constraints and decisions
 - Any other rule files referenced by the above
 
@@ -40,9 +41,9 @@ See `references/review-lens-framework.md`. Lens: `compliance-review`.
 ### 1. Collect All Rule Sources
 
 Read every rule document, in order:
-1. `coterie.md` (if exists in project root or references dir)
-2. `cross-cutting-rules.md` (references directory)
-3. `CLAUDE.md` (project root, if exists)
+1. `CLAUDE.md` (project root, if exists)
+2. `AGENTS.md` (project root, if exists)
+3. `cross-cutting-rules.md` (references directory)
 4. `project-context.md` (for constraints and architectural decisions)
 5. Any files referenced by the above (e.g., "see coding-standards.md")
 
@@ -135,7 +136,7 @@ See `references/review-lens-framework.md`. Lens: `compliance-review`.
 ## Examples
 
 ```
-User: Are we following our own rules? Check CLAUDE.md and coterie.md compliance.
+User: Are we following our own rules? Check CLAUDE.md and AGENTS.md compliance.
 → Triggers compliance-review. Extract rules from both files, cross-reference against
   codebase, produce findings with exact rule quotes.
 ```
@@ -160,4 +161,4 @@ User: Review this PR against our coding standards.
 
 ---
 
-Before completing, read and follow `../references/review-lens-framework.md` and `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/review-lens-framework.md` and `references/cross-cutting-rules.md`.

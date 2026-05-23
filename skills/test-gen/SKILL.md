@@ -107,7 +107,7 @@ Read `agents/test-worker.md` for the full prompt template.
 - Include at least one error/edge case test per function
 - Match the project's existing test conventions exactly
 - Not duplicate existing test coverage
-- Avoid all anti-patterns from test-review's `references/llm-test-antipatterns.md`:
+- Avoid all anti-patterns from references/llm-test-antipatterns.md:
   no magic numbers, no asserting mock return values, no hallucinated APIs
 
 ### 5. Run Tests
@@ -162,4 +162,4 @@ User: Generate property-based tests for the parser.
 
 ---
 
-Before completing, read and follow `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/cross-cutting-rules.md`.

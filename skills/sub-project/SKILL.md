@@ -1,6 +1,7 @@
 ---
 name: sub-project
 description: "Creates an isolated sub-project workspace within a parent project to keep Claude's context focused and high-quality. Invoke with /sub-project."
+disable-model-invocation: true
 ---
 
 # Sub-Project
@@ -33,8 +34,8 @@ unless explicitly needed.
 - `build-plan.md` — sub-project-specific implementation plan
 - `features.md` — sub-project feature set
 - CLAUDE.md or `rules/` config (mirrors parent pattern)
-- Symlinked shared config (coterie.md, linting, etc.)
-- `cnotes.md` — fresh collaboration log
+- AGENTS.md — agent-facing rules for the sub-project
+- Symlinked shared config (linting, etc.)
 - `todo.md` — fresh task tracker
 
 ## Instructions
@@ -59,7 +60,8 @@ the parent root. Pass these as explicit values to the scaffolder — do not
 delegate path math to the subagent.
 
 Also detect:
-- Does `coterie.md` exist? (symlink target)
+- Does `AGENTS.md` exist? (copy target)
+- Does `CLAUDE.md` exist? (copy target)
 - Does `project-context.md` exist? (distillation source)
 - Does `project-plan.md` exist? (scope reference)
 - Does `features.md` exist? (feature reference)
@@ -122,14 +124,12 @@ The scaffolder creates:
     compact/
   references/
   CLAUDE.md (or rules/, or both — mirrors parent)
-  coterie.md -> ../../coterie.md (symlink)
+  AGENTS.md (generated fresh for sub-project)
   .gitignore (inherited + sub-project additions)
-  cnotes.md (fresh from template)
   todo.md (fresh from template)
 ```
 
 **Symlinked files** (always current, single source of truth):
-- `coterie.md` — collaboration rules are project-wide
 - Linting configs (`.eslintrc`, `.prettierrc`, etc.) if they exist
 - `.editorconfig` if it exists
 - Design token files if they exist
@@ -140,7 +140,7 @@ The scaffolder creates:
 - `features.md` — Phase 5 handles this
 - `project-context.md` — lightweight, sub-project scoped
 - `CLAUDE.md` / `rules/` — references sub-project docs, not parent
-- `cnotes.md` — empty template
+- `AGENTS.md` — agent-facing rules scoped to this sub-project
 - `todo.md` — empty template
 
 **Exit condition**: Directory structure exists. Symlinks verified. Fresh files
@@ -200,7 +200,7 @@ Generate:
   decisions specific to this sub-project. References `architecture.md` for
   technical details rather than duplicating.
 - **CLAUDE.md** (or rules/) — References sub-project docs. Points to
-  `architecture.md`, `build-plan.md`, `features.md`, `coterie.md`.
+  `architecture.md`, `build-plan.md`, `features.md`, `AGENTS.md`.
 
 **Exit condition**: All docs exist, internally consistent, no references to
 missing files.
@@ -249,9 +249,9 @@ Final checks:
 Present the summary:
 > "Sub-project `{name}` is ready at `{path}`.
 >
-> **Symlinked** (stays current): coterie.md, [linting configs]
+> **Symlinked** (stays current): [linting configs]
 > **Generated** (sub-project specific): architecture.md, build-plan.md,
->   features.md, project-context.md, CLAUDE.md
+>   features.md, project-context.md, CLAUDE.md, AGENTS.md
 > **Research transferred**: [list or "none"]
 > **Git isolation**: worktree on `sub/{name}` / subdirectory mode
 >
@@ -316,4 +316,4 @@ Action: Analyze existing REST endpoints. Distill architecture.md with
 
 ---
 
-Before completing, read and follow `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/cross-cutting-rules.md`.

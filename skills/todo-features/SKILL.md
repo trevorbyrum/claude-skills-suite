@@ -103,4 +103,4 @@ Only update features.md. Read project-context.md for current state. Move feature
 
 ---
 
-Before completing, read and follow `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/cross-cutting-rules.md`.

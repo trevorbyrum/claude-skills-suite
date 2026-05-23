@@ -1,6 +1,7 @@
 ---
 name: meta-join
 description: "Join an existing project. Supports full onboard (7 steps) or quick catch-up (drift-review + sync only). Triggers on join project, catch up, onboard, quick catch-up."
+disable-model-invocation: true
 ---
 
 # meta-join
@@ -45,9 +46,8 @@ When triggered, ask the user:
 ### Step 1: Project Scaffold [Subagent]
 
 Check if the project has the standard directory structure (`artifacts/compact/`,
-`artifacts/research/`, `artifacts/research/summary/`, `artifacts/reviews/`, `docs/`, `src/`) and template files (`coterie.md`, `cnotes.md`,
-`todo.md`, `features.md`, `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`,
-`.gitignore`).
+`artifacts/research/`, `artifacts/research/summary/`, `artifacts/reviews/`, `docs/`, `src/`) and template files (`todo.md`, `features.md`, `CLAUDE.md`,
+`AGENTS.md`, `.gitignore`).
 
 - **If all present**: skip. Confirm: "Scaffold already exists — skipping."
 - **If partially present or missing**: dispatch a subagent. Do NOT read
@@ -211,4 +211,4 @@ User: This project has code but zero documentation.
 
 ---
 
-Before completing, read and follow `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/cross-cutting-rules.md`.

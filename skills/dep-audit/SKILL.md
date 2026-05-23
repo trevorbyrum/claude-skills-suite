@@ -1,6 +1,7 @@
 ---
 name: dep-audit
 description: Audits dependency health: CVEs, outdated versions, license conflicts, abandoned packages. Auto-installs audit tools. Use before deploys or quarterly.
+disable-model-invocation: true
 ---
 
 # Dependency Audit
@@ -221,4 +222,4 @@ User: We haven't updated deps in a year. How bad is it?
 
 ---
 
-Before completing, read and follow `../references/review-lens-framework.md` and `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/review-lens-framework.md` and `references/cross-cutting-rules.md`.

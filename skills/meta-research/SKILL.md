@@ -1,6 +1,7 @@
 ---
 name: meta-research
 description: "End-to-end research pipeline: plan then execute. Trigger for full research flow — from project context through countered synthesis. For research this project, do all the research, full research."
+disable-model-invocation: true
 ---
 
 # meta-research
@@ -175,4 +176,4 @@ Action: Detect existing research_plan.md. Confirm with the user. Skip to
 
 ---
 
-Before completing, read and follow `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/cross-cutting-rules.md`.

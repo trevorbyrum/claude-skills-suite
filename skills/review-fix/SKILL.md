@@ -1,6 +1,7 @@
 ---
 name: review-fix
 description: Implement fixes from meta-review findings. Parses review-synthesis.md, presents actionable items for user approval, dispatches Codex/Sonnet workers, verifies fixes. Use after meta-review or any review lens.
+disable-model-invocation: true
 ---
 
 # review-fix
@@ -128,14 +129,16 @@ which fixes to implement. The user may also:
 
 #### Worker Pool Setup
 
-Check Codex availability:
-```bash
-bash skills/codex/scripts/codex-exec.sh review --skip-concurrency --timeout 10 "Reply OK" > /dev/null 2>&1
+Check Codex availability with `mcp__codex-mcp__codex_health`:
+```json
+{
+  "cwd": "<project-root>"
+}
 ```
-Exit 0 = available, exit 1 = unavailable. Note the result.
+Healthy = available; unhealthy or failed MCP call = unavailable. Note the result.
 
 **Pool limits** (from `general.md`):
-- Codex: **5 concurrent** exec processes
+- Codex: **5 concurrent** MCP jobs
 - Active worktrees: **4 maximum**
 - Without Best-of-N: up to **4 fix units at a time**
 - Sonnet fallback: same 4-worktree cap
@@ -157,14 +160,17 @@ The context package contains:
 
 For each approved fix unit, dispatch a worker:
 
-**Codex worker** — invoke via wrapper with the fixer prompt:
-```bash
-bash skills/codex/scripts/codex-exec.sh generate \
-  --cd <project-root> \
-  "FIXER_PROMPT"
+**Codex worker** — call `mcp__codex-mcp__codex_run` with the fixer prompt:
+```json
+{
+  "mode": "generate",
+  "cwd": "<project-root>",
+  "prompt": "FIXER_PROMPT",
+  "timeout_sec": 300
+}
 ```
 Build `FIXER_PROMPT` from `agents/fixer.md` with all placeholders filled.
-For long prompts, write to a temp file and use `--stdin /tmp/fix-{ID}-prompt.md`.
+For long prompts, keep the prompt self-contained in the MCP `prompt` field.
 
 **Sonnet fallback:**
 Use `isolation: "worktree"` for parallel subagents. Each receives the same
@@ -293,4 +299,4 @@ Action: Mark the finding as false positive. Remove from fix queue.
 
 ---
 
-Before completing, read and follow `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/cross-cutting-rules.md`.

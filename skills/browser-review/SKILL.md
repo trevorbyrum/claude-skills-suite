@@ -1,6 +1,7 @@
 ---
 name: browser-review
 description: Visual QA via browser MCP tools (Playwright/browser-use). Use for UI review, visual bugs, or web interface inspection.
+disable-model-invocation: true
 ---
 
 # Browser Review
@@ -245,4 +246,4 @@ User: Compare the implementation against this Figma design. [Figma URL]
 
 ---
 
-Before completing, read and follow `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/cross-cutting-rules.md`.

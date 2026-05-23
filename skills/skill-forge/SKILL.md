@@ -114,10 +114,13 @@ Write the SKILL.md following the template exactly. Key rules:
 - Add Execution Mode section with standalone + multi-model patterns
 - Use artifact DB output pattern (Pattern A)
 
-**Skills that dispatch CLIs:**
-- Reference the driver skill (`/codex`, `/gemini`, `/vibe`, `/cursor`, `/copilot`)
-- Do NOT inline CLI commands, flags, paths, or timeout syntax
-- Specify only: task type, prompt template, output path, concurrency, fallback
+**Skills that dispatch external agents:**
+- For Codex, call `codex-mcp` MCP tools directly.
+- For Copilot, reference the `/copilot` driver skill.
+- For research / devil's-advocate / web grounding, spawn a Sonnet subagent via the Agent tool (use WebSearch when web grounding is needed).
+- Gemini, Cursor, and Vibe drivers have been removed — do NOT add references to them.
+- Do NOT inline raw CLI commands, flags, paths, or timeout syntax.
+- Specify only: task type, prompt template, output destination, concurrency, fallback.
 
 ### Phase 5: Write Reference Files (If Needed)
 
@@ -195,4 +198,4 @@ User: Make a driver skill for kubectl.
 
 ---
 
-Before completing, read and follow `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/cross-cutting-rules.md`.

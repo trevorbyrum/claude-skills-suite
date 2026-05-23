@@ -61,7 +61,7 @@ Never edit previous sections — only append new ones.
 
 **Timestamp**: {{ISO-8601}}
 
-**Reviewers**: {{Codex/Gemini/Copilot/Sonnet — which completed}}
+**Reviewers**: {{Codex MCP / Sonnet subagent / Copilot — which completed}}
 **Disputed items**: {{N}} (items reviewers say should NOT be removed)
 **Flagged items**: {{N}} (items needing closer look)
 **Missing items**: {{N}} (items reviewers say should be added)

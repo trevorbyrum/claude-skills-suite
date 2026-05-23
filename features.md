@@ -9,11 +9,11 @@
 | Hook system (7 hooks) | done | Session lifecycle hooks: start, stop, compact, pre-commit | 2026-03-06 | |
 | Progressive disclosure architecture | done | 3-level system: metadata, SKILL.md body, bundled references/agents/scripts | 2026-03-10 | |
 | SQLite+FTS5 artifact store | done | `artifacts/project.db` with `db.sh` helper for skill artifact persistence | 2026-03-10 | |
-| CLI delegation (Codex/Gemini) | done | Multi-model orchestration with concurrency limits, timeout wrappers | 2026-03-11 | |
+| CLI delegation (Codex MCP / Copilot / Sonnet subagents) | done | Multi-model orchestration with concurrency limits, timeout wrappers. Gemini/Cursor/Vibe drivers removed 2026-05-20. | 2026-03-11 | |
 | Wave-gated execution (meta-execute) | done | Dependency-ordered wave execution with inter-wave review gates | 2026-03-11 | |
 | Security review (OWASP Agentic) | done | P0/P1/P2 tiers, agent-specific patterns, supply chain checks | 2026-03-11 | |
 | Review-fix pipeline | done | Post-review fix implementation with Codex/Sonnet workers | 2026-03-11 | |
-| Meta-review Sonnet-primary | done | 7 Sonnet + 3 Codex + 2 Gemini = 12 reviews within concurrency limits | 2026-03-11 | |
+| Meta-review Sonnet-primary | done | 12-13 Sonnet + 8-9 Codex MCP = 18-20 reviews within concurrency limits. Gemini lenses dropped 2026-05-20 (counter, drift now Sonnet-only) | 2026-03-11 | |
 | GitHub sync | done | Repo initialized and pushed to trevorbyrum/claude-skills-suite | 2026-03-11 | |
 | test-review upgrade | done | Mutation testing, PBT, contract testing, strategy shapes, LLM anti-patterns, metrics | 2026-03-11 | 003D research applied. SKILL.md 273 lines + 6 reference files |
 | meta-production upgrade | done | 12 dims (was 10), SLO/SLI, chaos, DORA, capacity, progressive delivery, supply chain, incident maturity | 2026-03-11 | 004D research applied. SKILL.md + 4 reference files |
@@ -26,7 +26,7 @@
 | Meta-review SAST integration | planned | Run deterministic tools before LLM reviews, pipe SARIF output | 2026-03-11 | Highest-leverage remaining change |
 | Review skill thin wrappers | planned | Shared logic for 7 review lenses, reduce duplication | 2026-03-07 | P0 from skill audit |
 | Fresh-findings reuse | planned | Skip duplicate scans if results <24h old | 2026-03-07 | P1 — stops redundant work |
-| Gemini in project-questions | planned | Domain/competitor research before user interview | 2026-03-07 | P1 |
+| Sonnet WebSearch in project-questions | done | Domain/competitor research before user interview (via Sonnet subagent with WebSearch) | 2026-05-20 | replaced the original Gemini-based plan |
 | Codex in build-plan | planned | Generate skeleton files (interfaces, types, stubs) alongside plan | 2026-03-07 | P2 |
 | meta-join quick mode | planned | Fast catch-up without full 7-step onboard | 2026-03-07 | P2 |
 | Timeout guards for meta-skills | planned | Prevent infinite stalls on hung subagents | 2026-03-07 | P2 |

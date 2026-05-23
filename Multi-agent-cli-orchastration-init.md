@@ -1,5 +1,7 @@
 # The multi-agent CLI coding playbook: Claude Code, Codex, and Gemini working in concert
 
+> ⚠️ **Historical (2026-05-20)**: This doc is a descriptive research summary of multi-agent CLI patterns from early 2026, kept for context. The Claude Skills Suite originally drew from this ecosystem (Claude + Codex + Gemini + Cursor + Vibe), but as of 2026-05-20 the suite uses only **Codex MCP**, **Copilot**, and **Sonnet subagents** (Agent tool with WebSearch for the analyses Gemini used to handle). References to Gemini, Cursor, and Vibe below describe the broader practitioner landscape — they no longer reflect the suite's own implementation. Authoritative current state: `README.md`, `project-context.md`.
+
 **Developers are increasingly running Claude Code, OpenAI Codex CLI, and Gemini CLI as a coordinated team rather than picking one winner.** The emerging consensus — backed by benchmarks, practitioner reports, and a growing ecosystem of orchestration tools — is that each tool excels in a distinct role, and combining them produces measurably better outcomes than any single agent alone. A Milvus/Zilliz study found that pairing Claude and Gemini for adversarial code review caught **10 out of 15 bugs**, compared to Claude alone at 8 — and five models debating pushed detection from 53% to 80%. The practice is no longer theoretical: prominent developers like Simon Willison (Django co-creator) run "multiple terminal windows with different coding agents in different directories" as a daily workflow, and at least a dozen open-source orchestration tools now exist to manage these multi-agent setups.
 
 ## Proven orchestration patterns developers actually use
@@ -14,7 +16,7 @@ Five distinct patterns have emerged from practitioner communities, each serving 
 
 **The "Adversarial Review" pattern** uses cross-model verification. In the Milvus study by Li Liu, five models independently reviewed the same pull request, then broadcast their reviews through five rounds of structured debate. The key finding: Claude + Gemini is the optimal two-model pairing for code review because "their weaknesses barely overlap." A developer on Hacker News reported using this for legal draft review: "The final version was shocking. The process found some flaws that surprised me."
 
-**The "Slash Command Router" pattern**, documented by paddo.dev, builds `/gemini` and `/codex` commands within Claude Code that spawn the other CLIs and pipe results back. The routing logic: Claude handles backend logic and debugging, Gemini handles visual analysis and research with its large context window, and Codex handles architecture decisions and systems thinking. No MCP server required — just spawn the CLI and pipe back stdout.
+**The router pattern**, documented by paddo.dev, originally used Claude Code slash commands to spawn other CLIs and pipe results back. This suite now keeps Gemini behind the `/gemini` driver skill but routes Codex through the typed `codex-mcp` MCP server, so Claude calls `mcp__codex-mcp__codex_run` or the async Codex MCP tools instead of remembering shell syntax.
 
 ## What each tool is objectively best at
 

@@ -61,8 +61,8 @@ artifacts/general/pivot-summary.md. This applies to all subagent phases (3,6,7,8
 
 Context-minimal orchestrator following established meta-skill patterns
 (meta-research, meta-execute). Main thread handles orchestration + human gates.
-Heavy analysis dispatched to Opus subagent. Adversarial debate via Codex + Gemini
-at the two highest-impact decision points.
+Heavy analysis dispatched to Opus subagent. Adversarial debate via Codex MCP
++ Sonnet subagent at the two highest-impact decision points.
 
 **Delegation map:**
 
@@ -70,9 +70,9 @@ at the two highest-impact decision points.
 Phase 1: Direction Interview        [I] Inline — user interaction
 Phase 2: Context Rewrite            [I] Inline — user approval per doc change
 Phase 3: Deep Analysis              [S] Opus subagent (impact-analysis + clean-project)
-Phase 3.5: Adversarial Challenge    [W] Codex + Gemini challenge removal candidates
+Phase 3.5: Adversarial Challenge    [W] Codex + Sonnet subagent challenge removal candidates
 Phase 4: Triage & Scoring           [I] Inline — user keep/cut/simplify decisions
-Phase 4.5: Adversarial Challenge    [W] Codex + Gemini challenge cut decisions
+Phase 4.5: Adversarial Challenge    [W] Codex + Sonnet subagent challenge cut decisions
 Phase 5: Decision Logging           [I] Inline — user confirms ADRs
 Phase 6: Wave Execution             [S] Opus subagent per wave, main thread gates
 Phase 7: Verification               [S] Sonnet subagent (drift + completeness)
@@ -93,19 +93,20 @@ Phase 8: Final Doc Update           [S] Sonnet subagent (evolve)
    (structural scan). Agents read *updated* docs from Phase 2. Opus writes
    results to `/tmp/pivot-analysis-*`. Main thread reads, calls `db_upsert`,
    appends to pivot-summary.md.
-4. **Adversarial Challenge I** [W, Codex+Gemini] — Before presenting candidates
-   to user. Codex and Gemini independently review the removal candidates + blast
-   radius. Each flags false positives, missed dependencies, and items they
-   disagree on. Annotations merged into the candidate list. Fallback: Codex →
-   Sonnet, Gemini → Copilot → Sonnet. At minimum 2 adversarial reviewers run.
+4. **Adversarial Challenge I** [W, Codex+Sonnet subagent] — Before presenting
+   candidates to user. Codex MCP and a contrarian Sonnet subagent independently
+   review the removal candidates + blast radius. Each flags false positives,
+   missed dependencies, and items they disagree on. Annotations merged into
+   the candidate list. Fallback: Codex → second Sonnet subagent; Sonnet
+   subagent → Copilot. At minimum 2 adversarial reviewers run.
 5. **Triage & Scoring** [I, human-gated] — Runs scope-triage (modified RICE +
    MoSCoW) with adversarial annotations visible. User makes final
    keep/cut/simplify decisions per candidate.
-6. **Adversarial Challenge II** [W, Codex+Gemini] — After triage, before
-   logging. Codex and Gemini attack the cut decisions: "You're cutting X but Y
-   depends on it", "You're keeping Z but it contradicts the new direction",
-   "Wave ordering is wrong because...". User can revise triage or confirm.
-   Same fallback chain.
+6. **Adversarial Challenge II** [W, Codex+Sonnet subagent] — After triage,
+   before logging. Codex MCP and a contrarian Sonnet subagent attack the cut
+   decisions: "You're cutting X but Y depends on it", "You're keeping Z but
+   it contradicts the new direction", "Wave ordering is wrong because...".
+   User can revise triage or confirm. Same fallback chain.
 7. **Decision Logging** [I] — ADR-format records per cut decision. Immutable
    — never edited, only superseded.
 8. **Wave Execution** [S, Opus per wave] — Dispatches surgical-remove via
@@ -128,10 +129,10 @@ Phase 8: Final Doc Update           [S] Sonnet subagent (evolve)
 For each debate point (Phase 3.5, Phase 4.5):
   1. Write debate prompt to /tmp/pivot-debate-{phase}.md
   2. Dispatch in parallel:
-     - Codex via codex-exec.sh review (120s timeout)
-     - Gemini via /gemini driver (120s timeout)
-  3. Fallback chain: Codex fails → Sonnet subagent
-                     Gemini fails → Copilot → Sonnet subagent
+     - Codex via `mcp__codex-mcp__codex_run` with `mode: "debate"`
+     - Sonnet subagent (Agent tool) framed as contrarian reviewer
+  3. Fallback chain: Codex fails → second Sonnet subagent
+                     Sonnet subagent fails → Copilot
   4. At minimum 2 of 3 reviewers must complete
   5. Main thread merges disagreements, annotates candidate list
   6. Disagreements highlighted in red for user attention
@@ -228,7 +229,7 @@ instant rollback per wave.
 | WU-1-07 | surgical-remove references | 1 | yes | 100 | skills/surgical-remove/references/wave-protocol.md | — | Wave ordering rationale. Characterization test strategy. Rollback decision tree. Pre-prod vs prod detection logic. |
 | WU-2-01 | meta-pivot SKILL.md | 2 | no | 450 | skills/meta-pivot/SKILL.md | WU-1-* | 10-phase orchestrator (8 phases + 2 adversarial debates). Delegation keys. Opus subagent dispatch for Phases 3,8,9,10. Adversarial debate protocol for Phases 3.5,4.5. Artifact output schema. Error handling. Examples. Cross-cutting footer. |
 | WU-2-02 | Agent: deep-analysis (Opus) | 2 | yes | 80 | skills/meta-pivot/agents/deep-analysis.md | WU-2-01 | Opus subagent prompt. Reads impact-analysis + clean-project SKILL.md. Runs all 4 analysis modes incl external scan. Writes results to temp files. Placeholders: [PROJECT_PATH], [UPDATED_DOCS_HASH]. |
-| WU-2-03 | Agent: adversarial-debate | 2 | yes | 80 | skills/meta-pivot/agents/adversarial-debate.md | WU-2-01 | Prompt template for Codex + Gemini debate. Two modes: candidate-challenge (Phase 3.5) and triage-challenge (Phase 4.5). Fallback chain documented. Placeholders: [CANDIDATES], [TRIAGE_DECISIONS], [DIRECTION_SUMMARY]. Output: annotated disagreements. |
+| WU-2-03 | Agent: adversarial-debate | 2 | yes | 80 | skills/meta-pivot/agents/adversarial-debate.md | WU-2-01 | Prompt template for Codex + Sonnet subagent debate. Two modes: candidate-challenge (Phase 3.5) and triage-challenge (Phase 4.5). Fallback chain documented. Placeholders: [CANDIDATES], [TRIAGE_DECISIONS], [DIRECTION_SUMMARY]. Output: annotated disagreements. |
 | WU-2-04 | Agent: wave-executor (Opus) | 2 | yes | 60 | skills/meta-pivot/agents/wave-executor.md | WU-2-01 | Opus subagent prompt. Reads surgical-remove SKILL.md. Placeholders: [WAVE_NUMBER], [CANDIDATE_LIST], [PROJECT_PATH]. Writes execution log to temp file. |
 | WU-2-05 | Agent: verification | 2 | yes | 50 | skills/meta-pivot/agents/verification.md | WU-2-01 | Sonnet subagent prompt. Reads drift-review + completeness-review SKILL.md. Placeholders: [PROJECT_PATH], [PIVOT_SUMMARY_PATH]. |
 | WU-2-06 | Agent: doc-update | 2 | yes | 40 | skills/meta-pivot/agents/doc-update.md | WU-2-01 | Sonnet subagent prompt. Reads evolve SKILL.md. Placeholders: [PROJECT_PATH], [PIVOT_SUMMARY_PATH]. |
@@ -268,8 +269,8 @@ WU-1-07 (surgical-remove refs) ────┘    Phase 2 (agents parallel after
 | External scan misses dependencies | Medium | High | Checklist-driven (external-scan.md). Warn user that scan is best-effort. Manual review for production systems. Adversarial debate in Phase 3.5 may catch gaps. |
 | Wave execution too slow for small projects | Medium | Medium | Pre-production shortcut: single branch, no wave splitting. Auto-detect in Phase 3. |
 | Skill too heavyweight | Medium | High | Natural exit points at each phase. Phases 1-2 valuable standalone. Can stop after Phase 5 (triage) if user just wants analysis. |
-| Adversarial debate adds latency | Medium | Low | Codex + Gemini run in parallel (120s each). Total added time ~2-3 min. Value: catches false positives before user makes irreversible decisions. |
-| Codex + Gemini both unavailable | Low | Medium | Triple fallback: Codex → Sonnet, Gemini → Copilot → Sonnet. At minimum 2 Sonnet subagents always run. |
+| Adversarial debate adds latency | Medium | Low | Codex + Sonnet subagent run in parallel (120s each). Total added time ~2-3 min. Value: catches false positives before user makes irreversible decisions. |
+| Codex + Sonnet subagent both unavailable | Low | Medium | Triple fallback: Codex → second Sonnet subagent → Copilot. At minimum 2 Sonnet subagents always run. |
 | Context rewrite misunderstands direction | Low | High | Two human gates: confirm old→new summary, then approve each doc change with explanation. |
 | External removal breaks running services | Low | Critical | External blast radius scan surfaces these BEFORE triage. Candidates with external deps flagged as CRITICAL in triage. User must explicitly acknowledge. |
 
@@ -278,7 +279,7 @@ WU-1-07 (surgical-remove refs) ────┘    Phase 2 (agents parallel after
 No existing tool provides a full project pivot workflow. The closest:
 - **Knip / dependency-cruiser** — Dead code + dependency analysis only. No triage, no execution, no doc integration.
 - **OpenRewrite** — Automated refactoring recipes. Java-focused. No pivot awareness.
-- **Gemini Code Assist / Copilot** — Codebase-aware refactoring but no structured pivot process.
+- **Copilot / similar AI assistants** — Codebase-aware refactoring but no structured pivot process.
 - **Moderne (Moddy)** — Enterprise refactoring at scale. Closest competitor but recipe-based, not direction-change-aware.
 
 **Differentiation**: meta-pivot is the only tool that:

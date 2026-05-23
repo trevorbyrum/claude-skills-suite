@@ -1,13 +1,14 @@
 ---
 name: release-prep
 description: Automates release preparation — changelog generation, version bump, release notes, and git tag. Use when preparing a release, cutting a version, or shipping a milestone.
+disable-model-invocation: true
 ---
 
 # Release Prep
 
-Generate a changelog from git history and cnotes.md, bump the version, draft
-release notes, and prepare a git tag. The user approves before the tag is
-actually created — this skill does not push or publish without confirmation.
+Generate a changelog from git history, bump the version, draft release notes,
+and prepare a git tag. The user approves before the tag is actually created —
+this skill does not push or publish without confirmation.
 
 ## Inputs
 
@@ -15,9 +16,6 @@ actually created — this skill does not push or publish without confirmation.
   `VERSION` file, or whatever the project uses for versioning. If no version
   file exists, ask the user for the current version.
 - **Git log since last tag** — `git log $(git describe --tags --abbrev=0 2>/dev/null || echo "")..HEAD --oneline`
-- **cnotes.md** — decision log from the project root. Contains context that
-  raw git history misses: why changes were made, trade-offs considered,
-  decisions deferred.
 
 ## Outputs
 
@@ -73,10 +71,9 @@ present. For commits without prefixes, infer the category from the diff:
 - **Infrastructure** — CI/CD, Docker, deployment, dependency updates
 - **Documentation** — docs-only changes
 
-**cnotes.md**: Scan for entries dated after the last release. Extract
-decisions, trade-offs, and context that enriches the changelog beyond
-one-line commit messages. Reference relevant cnotes entries by their note ID
-(CN-YYYYMMDD-HHMMSS-AUTHOR) in the changelog where they add useful context.
+Use the full git log to understand the context and intent behind changes.
+For commits with terse messages, inspect the diff to infer the user-facing
+impact and write a meaningful changelog entry.
 
 ### 4. Update CHANGELOG.md
 
@@ -103,7 +100,7 @@ Format:
 - Description of infra change
 
 ### Notes
-- Key decision context from cnotes.md (ref: CN-YYYYMMDD-HHMMSS-AUTHOR)
+- Key decision context from git log (commit context, PR descriptions, commit body)
 ```
 
 Omit empty sections. Keep descriptions human-readable — rewrite terse commit
@@ -157,46 +154,46 @@ the commands but do NOT push. Tell the user to push when ready:
 
 Use Codex to generate a detailed changelog from git history:
 
-1. Dispatch a Codex worker to draft the changelog:
-   ```bash
-   bash skills/codex/scripts/codex-exec.sh review \
-     --cd <project-root> \
-     --output /tmp/codex-changelog-draft.md \
-     "Analyze the git log since the last release tag. For each commit, categorize as: feat/fix/refactor/docs/chore. Group by category. Write a user-facing changelog in Keep a Changelog format. Include PR numbers if available. Summarize breaking changes separately."
+1. Dispatch a Codex worker with `mcp__codex-mcp__codex_run`:
+   ```json
+   {
+     "mode": "review",
+     "cwd": "<project-root>",
+     "prompt": "Analyze the git log since the last release tag. For each commit, categorize as: feat/fix/refactor/docs/chore. Group by category. Write a user-facing changelog in Keep a Changelog format. Include PR numbers if available. Summarize breaking changes separately.",
+     "timeout_sec": 300
+   }
    ```
-2. If the command succeeds, read `/tmp/codex-changelog-draft.md` and refine based on cnotes.md entries and human context.
-3. If the command fails (exit 1 = Codex unavailable), generate the changelog manually from git log + cnotes.md.
+2. If the MCP call succeeds, refine the final message based on git log context and human input.
+3. If the MCP call fails, generate the changelog manually from git log.
 
-### User-Facing Release Notes (Gemini)
+### User-Facing Release Notes (Sonnet subagent)
 
 After the changelog is drafted, generate user-friendly release notes:
 
-1. Load `/gemini` for invocation syntax.
-2. If available, invoke using the `/gemini` Research / Analysis template with
-   a 60s timeout. Do not force `@generalist_agent`. Prompt:
-   `"Convert this technical changelog into user-friendly release notes. Focus
-   on what users care about: new features, fixed bugs, breaking changes that
-   require action. Skip internal refactors. Write in a friendly, professional
-   tone. Changelog: [CHANGELOG_CONTENT]"`.
-3. Present both the technical changelog and user-facing notes for review.
-4. If Gemini is unavailable or fails, retry with Copilot — load `/copilot`
-   for invocation syntax. Same prompt, 60s timeout.
-5. If both Gemini and Copilot fail, skip user-facing notes — the technical changelog is sufficient.
+1. Spawn a Sonnet subagent (`subagent_type: "general-purpose"`) with this
+   prompt: `"Convert this technical changelog into user-friendly release
+   notes. Focus on what users care about: new features, fixed bugs, breaking
+   changes that require action. Skip internal refactors. Write in a friendly,
+   professional tone. Changelog: [CHANGELOG_CONTENT]"`.
+2. Present both the technical changelog and the user-facing notes for review.
+3. If the Sonnet subagent fails, retry with Copilot — load `/copilot` for
+   invocation syntax. Same prompt, 60s timeout.
+4. If both fail, skip user-facing notes — the technical changelog is sufficient.
 
-## Why Two Sources
+## Why Context Matters
 
-Git history tells you *what* changed. cnotes.md tells you *why*. A changelog
-that only lists commits is a glorified `git log`. A changelog that includes
-decision context helps future maintainers (and the user's future self)
-understand the intent behind the release.
+Git history tells you *what* changed. Commit bodies, PR descriptions, and
+broader diffs tell you *why*. A changelog that only lists one-line commit
+summaries is a glorified `git log`. A changelog that includes intent and
+decision context helps future maintainers understand the release.
 
 ## Examples
 
 ```
 User: We just finished the auth overhaul. Prepare a release.
---> Read current version, git log since last tag, and cnotes.md. Recommend a
-    minor bump (new feature, backward-compatible). Present changelog draft
-    and release notes. Wait for approval before tagging.
+--> Read current version and git log since last tag. Recommend a minor bump
+    (new feature, backward-compatible). Present changelog draft and release
+    notes. Wait for approval before tagging.
 ```
 
 ```
@@ -215,4 +212,4 @@ User: /release-prep major
 
 ---
 
-Before completing, read and follow `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/cross-cutting-rules.md`.

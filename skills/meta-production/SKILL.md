@@ -1,6 +1,7 @@
 ---
 name: meta-production
 description: Scored production readiness assessment (READY / CONDITIONAL / NOT READY) across 12 dimensions. Use when asking "can we ship this?" Outputs artifacts/reviews/production-readiness.md.
+disable-model-invocation: true
 ---
 
 # meta-production
@@ -13,8 +14,8 @@ Backstage Soundcheck, Port.dev, and GitLab PRR.
 ## Chain
 
 ```
-[Phase 1: Stack Research]     Gemini — production patterns for this stack
-[Phase 2: Parallel Scan]      7 review lenses (Sonnet) + production scan (5 Codex)
+[Phase 1: Stack Research]     Sonnet subagent w/ WebSearch — production patterns for this stack
+[Phase 2: Parallel Scan]      7 review lenses (Sonnet) + production scan (5 Codex) + practices audit (Codex)
 [Phase 3: Scoring]            Claude — score 12 dimensions from Phase 1-2 findings
 [Phase 4: Report]             Write artifacts/reviews/production-readiness.md with verdict
 ```
@@ -88,31 +89,40 @@ sink a deployment.
 
 ## Instructions
 
-### Phase 1: Stack Research (Gemini)
+### Phase 1: Stack Research (Sonnet subagent with WebSearch)
 
 Before scanning code, research production best practices specific to this
 project's tech stack. Read `project-context.md` to identify the stack and
 determine the service criticality tier.
 
-```bash
-bash skills/gemini/scripts/gemini-exec.sh research \
-  --output /tmp/prr-stack-research.md \
-  "Research production readiness best practices for a [STACK] application.
+Spawn a Sonnet subagent (`subagent_type: "general-purpose"`) with WebSearch
+access using this prompt:
+
+```
+You have WebSearch access. Research production readiness best practices for a
+[STACK] application.
+
 Cover: deployment patterns (blue/green, canary, progressive delivery),
 observability (SLI-based alerting, OpenTelemetry, cost-aware),
 security hardening (supply chain, runtime security, network policies),
 SLO/SLI definition, chaos engineering readiness, capacity planning,
 incident response maturity, and common production antipatterns.
-Be specific to this stack — not generic advice.
-Project context: [first 3 sections of project-context.md]"
-```
-Replace `[STACK]` with the actual tech stack from project-context.md.
-Output to `/tmp/prr-stack-research.md`.
 
-If Gemini is unavailable or fails, retry with Copilot — load `/copilot`
-for invocation syntax. Same prompt, same output file.
-If both Gemini and Copilot fail, use Claude WebSearch. Stack research is NOT
-optional — the production-specific checks in Phase 2 use these findings.
+Be specific to this stack — not generic advice. Cite URLs for every claim.
+
+Project context: [first 3 sections of project-context.md]
+
+Return your research as text. The orchestrator will store it.
+```
+
+Replace `[STACK]` with the actual tech stack from project-context.md.
+After the subagent returns, write its output to `/tmp/prr-stack-research.md`.
+
+If the Sonnet subagent fails to gather useful sources (e.g., WebSearch is
+disabled), retry with Codex MCP in `review` mode against the codebase plus
+prior research artifacts, or as a last resort use Copilot — load `/copilot`
+for invocation syntax. Stack research is NOT optional — the production-specific
+checks in Phase 2 use these findings.
 
 ### Phase 2: Parallel Scan
 
@@ -152,12 +162,14 @@ Uses all 5 available Codex slots.
 Read `references/production-scan-prompts.md` for prompts for Dims 8-10.
 Read `references/reliability-capacity-prompts.md` for prompts for Dims 11-12.
 
-Launch all 5 in parallel via the Codex wrapper. Each invocation:
-```bash
-bash skills/codex/scripts/codex-exec.sh review \
-  --cd /path/to/project \
-  --output /tmp/prr-{dimension}.md \
-  "DIMENSION_PROMPT"
+Launch all 5 in parallel via `mcp__codex-mcp__codex_start`. Each invocation:
+```json
+{
+  "mode": "review",
+  "cwd": "/path/to/project",
+  "prompt": "DIMENSION_PROMPT",
+  "timeout_sec": 300
+}
 ```
 
 **Workers 1-3** — Observability (8), Deployment (9), Operations (10):
@@ -180,31 +192,33 @@ done
 If Codex is unavailable, run these 5 checks as Sonnet subagents instead.
 Less depth but still covers the patterns via grep and file analysis.
 
-#### Track C: Production Research Cross-Reference (Gemini)
+#### Track C: Production Research Cross-Reference (Codex MCP)
 
-While Track A and B run, have Gemini cross-reference the stack research
-(Phase 1) against the project's actual implementation:
+While Track A and B run, have Codex MCP cross-reference the stack research
+(Phase 1) against the project's actual implementation. Codex MCP runs
+against the codebase directly, so it can cite specific files and lines.
 
-```bash
-bash skills/gemini/scripts/gemini-exec.sh review \
-  --output /tmp/prr-practices.md \
-  "Compare these production best practices against the actual codebase.
-For each practice, mark it as: IMPLEMENTED, PARTIALLY IMPLEMENTED, or MISSING.
-Cite specific files and lines.
-Best practices: $(cat /tmp/prr-stack-research.md)
-Focus on the top 20 most critical practices for this stack."
+Call `mcp__codex-mcp__codex_run`:
+```json
+{
+  "mode": "review",
+  "cwd": "<project-root>",
+  "prompt": "Compare these production best practices against the actual codebase. For each practice, mark it as: IMPLEMENTED, PARTIALLY IMPLEMENTED, or MISSING. Cite specific files and lines. Focus on the top 20 most critical practices for this stack.\n\nBest practices:\n<contents of /tmp/prr-stack-research.md>",
+  "timeout_sec": 300
+}
 ```
-Then store in DB:
+
+Store the final Codex message in DB:
 ```bash
 source artifacts/db.sh
-db_upsert 'meta-production' 'scan' 'practices-audit' "$(cat /tmp/prr-practices.md)"
-rm /tmp/prr-practices.md
+db_upsert 'meta-production' 'scan' 'practices-audit' "$CODEX_FINAL_MESSAGE"
 ```
 
-If Gemini is unavailable or fails, retry Track C with Copilot — load `/copilot`
-for invocation syntax. Same prompt, same output file and DB storage step.
-If both Gemini and Copilot fail, skip this track. It enriches the report but
-isn't required for scoring.
+If Codex MCP is unavailable, retry Track C with Copilot — load `/copilot`
+for invocation syntax. Same prompt, same DB storage step.
+If both Codex and Copilot fail, fall back to a Sonnet subagent reading the
+codebase directly with the same prompt. It enriches the report but isn't
+required for scoring.
 
 ### Phase 3: Scoring
 
@@ -269,7 +283,7 @@ for detailed scoring criteria per tier. Chaos readiness scores as a maturity
 indicator — higher is better, but absence doesn't block.
 
 **Cross-validation**: Compare each Codex worker's findings against the
-Gemini practices audit (Track C). If they contradict, investigate. The more
+practices audit (Track C). If they contradict, investigate. The more
 conservative score wins unless you can verify the optimistic assessment.
 When both agree, boost confidence to HIGH.
 
@@ -315,14 +329,15 @@ codebase may have changed.
 
 ## Error Handling
 
-- If Gemini is unavailable: try Copilot as fallback for stack research (Phase 1)
-  and Track C (practices audit). If both fail, use Claude WebSearch for Phase 1
-  and skip Track C. Note in methodology section.
-- If Codex is unavailable: run production antipattern checks as Sonnet
-  subagents instead. Note reduced scan depth in methodology.
-- If both are unavailable: all scans run via Sonnet subagents. The report
-  is still valid but note "single-model assessment" in methodology and
-  reduce confidence in Dimensions 8-12 scoring.
+- If the Phase 1 Sonnet subagent can't access WebSearch: try Codex MCP
+  against existing project research artifacts, then Copilot. Note in
+  methodology section.
+- If Codex is unavailable: run production antipattern checks and the
+  practices audit as Sonnet subagents instead. Note reduced scan depth in
+  methodology.
+- If all external workers are unavailable: all scans run via Sonnet
+  subagents. The report is still valid but note "single-model assessment"
+  in methodology and reduce confidence in Dimensions 8-12 scoring.
 - If a review lens fails: score that dimension 0 and note "assessment
   incomplete" in the scorecard.
 
@@ -330,10 +345,11 @@ codebase may have changed.
 
 ```
 User: "Is this ready for production?"
-Action: Read project-context.md for stack + criticality tier. Phase 1 — Gemini
-        researches production patterns. Phase 2 — 7 review lenses + 5 Codex
-        production scans + Gemini practices audit. Phase 3 — score all 12
-        dimensions (weight Dims 11-12 by tier). Phase 4 — write report.
+Action: Read project-context.md for stack + criticality tier. Phase 1 —
+        Sonnet subagent with WebSearch researches production patterns.
+        Phase 2 — 7 review lenses + 5 Codex production scans + Codex
+        practices audit. Phase 3 — score all 12 dimensions (weight Dims
+        11-12 by tier). Phase 4 — write report.
 ```
 
 ```
@@ -344,8 +360,8 @@ Action: Full PRR flow. All 4 phases, 12 dimensions.
 ```
 User: "We already ran a full review, just check production readiness"
 Action: Check artifact DB for fresh lens findings (db_age_hours < 24). Reuse
-        for Dims 1-7. Run only production scans (5 Codex + Gemini) for Dims
-        8-12. Score and report.
+        for Dims 1-7. Run only production scans (5 Codex + practices audit)
+        for Dims 8-12. Score and report.
 ```
 
 ```
@@ -356,4 +372,4 @@ Action: Re-run only dimensions that scored below 7. Reuse passing dimensions.
 
 ---
 
-Before completing, read and follow `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/cross-cutting-rules.md`.

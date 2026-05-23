@@ -5,7 +5,9 @@ description: Self-diagnostic for the skill suite. Use after install, after addin
 
 # Skill Doctor
 
-Comprehensive diagnostic of the skill suite. Checks all expected files exist, external CLIs are reachable, and paths resolve. Reports PASS/FAIL with fix instructions.
+Comprehensive diagnostic of the skill suite. Checks all expected files exist,
+external CLIs are reachable, and Codex MCP is healthy. Reports PASS/FAIL with
+fix instructions.
 
 ## Inputs
 
@@ -18,14 +20,14 @@ Comprehensive diagnostic of the skill suite. Checks all expected files exist, ex
 
 Verify the skills directory exists. If not, report failure and stop.
 
-### 2. Check Atomic Skills (21)
+### 2. Check Atomic Skills (20)
 
 Each should have a `SKILL.md`:
 
 ```
 quick-plan, build-plan, repo-create, github-sync,
 deploy-gateway, todo-features, release-prep,
-browser-review, codex, gemini,
+browser-review, copilot,
 completeness-review, compliance-review, counter-review, drift-review,
 refactor-review, security-review, test-review,
 project-scaffold, project-questions, project-context, infra-health
@@ -56,10 +58,9 @@ evolve, skill-doctor, sync-skills
 
 **In `project-scaffold/templates/`:**
 ```
-coterie-template.md, cnotes-template.md, todo-template.md,
-features-template.md, claude-md-template.md, agents-md-template.md,
-gemini-md-template.md, codex-instructions-template.md,
-gemini-instructions-template.md
+todo-template.md, features-template.md, claude-md-template.md,
+agents-md-template.md, codex-instructions-template.md,
+copilot-instructions-template.md, gitignore-template
 ```
 
 **In `project-context/templates/`:** `context-template.md`
@@ -77,12 +78,12 @@ evolve-plan-diff.md
 
 Every skill references `cross-cutting-rules.md` in its footer. If missing, skill completion steps fail.
 
-### 8. Check External CLIs
+### 8. Check External Agents
 
 | Tool | Check | Required |
 |---|---|---|
-| `gemini` | `which gemini >/dev/null 2>&1` | Optional |
-| `codex` | Resolve NVM/Homebrew Codex path; verify executable exists | Optional |
+| `codex-mcp` | Call `mcp__codex-mcp__codex_health` with the current project cwd | Optional |
+| `copilot` | `which copilot >/dev/null 2>&1` | Optional |
 | `jq` | `which jq >/dev/null 2>&1` | Required (hooks) |
 | `gh` | `which gh >/dev/null 2>&1` | Required (github-sync, repo-create) |
 
@@ -107,13 +108,13 @@ Missing flag = WARNING (consuming description budget unnecessarily).
 
 | Category | Checked | Passed | Failed | Warnings |
 |---|---|---|---|---|
-| Atomic Skills | 21 | ... | ... | 0 |
+| Atomic Skills | 20 | ... | ... | 0 |
 | Research Skills | 5 | ... | ... | 0 |
 | Meta Skills | 6 | ... | ... | 0 |
 | Utility Skills | 3 | ... | ... | 0 |
-| Templates | 11 | ... | ... | 0 |
+| Templates | 9 | ... | ... | 0 |
 | References | 3 | ... | ... | 0 |
-| External CLIs | 4 | ... | ... | ... |
+| External Agents | 4 | ... | ... | ... |
 | Invocation Flags | 8 | ... | ... | ... |
 
 ### Failures
@@ -139,10 +140,10 @@ User: /skill-doctor
 ```
 
 ```
-User: Why did counter-review fail to call Gemini?
---> Check 8 (CLIs). Verify gemini installed. Note fallback behavior.
+User: Why did counter-review fail to call Codex?
+--> Check 8 (External Agents). Run `mcp__codex-mcp__codex_health`. Note fallback to Sonnet subagent.
 ```
 
 ---
 
-Before completing, read and follow `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/cross-cutting-rules.md`.

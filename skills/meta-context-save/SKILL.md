@@ -158,4 +158,4 @@ Skip the push (note "working tree clean"). Store compact state in DB. Review. Cl
 
 ---
 
-Before completing, read and follow `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/cross-cutting-rules.md`.

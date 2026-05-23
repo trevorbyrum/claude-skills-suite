@@ -7,7 +7,7 @@ disable-model-invocation: true
 # project-context
 
 Write `project-context.md` — the comprehensive project context document that
-any agent (Claude, Codex, Gemini, Copilot) can read to cold-start on this
+any agent (Claude, Codex, Copilot) can read to cold-start on this
 project with zero additional context. This is the single most important file
 in the project. If the project burned down and you could save one document,
 save this one.
@@ -121,4 +121,4 @@ Action: Read the existing file first. Ask what changed. Rewrite the full
 
 ## Cross-cutting
 
-Before completing, read and follow `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/cross-cutting-rules.md`.

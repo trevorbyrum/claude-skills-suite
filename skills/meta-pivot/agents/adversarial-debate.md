@@ -1,7 +1,7 @@
-# Adversarial Debate — Codex + Gemini Protocol
+# Adversarial Debate — Codex + Sonnet Protocol
 
 Two modes: `candidate-challenge` (Phase 3.5) and `triage-challenge` (Phase 4.5).
-Main thread fills in placeholders and dispatches CLIs.
+Main thread fills in placeholders and dispatches workers.
 
 ---
 
@@ -47,23 +47,36 @@ Be adversarial. Assume the analysis missed something.
 
 ### Dispatch
 
-```bash
-# Codex (load /codex driver for syntax)
-bash skills/codex/scripts/codex-exec.sh review \
-  --output /tmp/pivot-debate-codex.md \
-  --timeout 120 \
-  --stdin /tmp/pivot-debate-candidates.md
+**Reviewer 1 — Codex MCP** (debate mode):
 
-# Gemini (load /gemini driver for syntax)
-# Use Research / Analysis template, 120s timeout
-# Output to /tmp/pivot-debate-gemini.md
+```json
+{
+  "tool": "mcp__codex-mcp__codex_run",
+  "arguments": {
+    "mode": "debate",
+    "cwd": "<project-root>",
+    "prompt": "[contents of /tmp/pivot-debate-candidates.md]",
+    "timeout_sec": 300
+  }
+}
 ```
+
+Store the final message at `/tmp/pivot-debate-codex.md`.
+
+**Reviewer 2 — Sonnet subagent** (devil's advocate):
+
+Spawn an Agent (`subagent_type: "general-purpose"`) with the contents of
+`/tmp/pivot-debate-candidates.md` as the prompt, explicitly framing the
+subagent as a contrarian reviewer who has NOT participated in Phase 3.
+The subagent returns its assessment as text; the main thread writes it to
+`/tmp/pivot-debate-sonnet.md`.
 
 ### Fallback
 
-- Codex fails → Sonnet subagent with same prompt, write to /tmp/pivot-debate-sonnet-1.md
-- Gemini fails → Copilot (load /copilot), same prompt → /tmp/pivot-debate-copilot.md
-- Copilot fails → Sonnet subagent, write to /tmp/pivot-debate-sonnet-2.md
+- Codex fails → second Sonnet subagent with same prompt, write to
+  `/tmp/pivot-debate-sonnet-2.md`
+- Sonnet subagent fails → Copilot (load `/copilot`), same prompt →
+  `/tmp/pivot-debate-copilot.md`
 - Minimum: 2 reviewers must complete
 
 ---
@@ -110,4 +123,5 @@ Output format:
 
 ### Dispatch
 
-Same pattern as candidate-challenge. Same fallback chain.
+Same pattern as candidate-challenge (Codex MCP `debate` + Sonnet subagent).
+Same fallback chain.

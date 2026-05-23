@@ -76,11 +76,17 @@ this phase and present the plan for approval.
 6. **Self-counter**: Are topics too broad? Already answered? Missing obvious needs?
 
 7. **Determine NNN and store**:
+   Regular research and deep research share one numeric sequence. Scan the
+   filesystem (not the DB) to find the next number:
    ```bash
+   HIGHEST=$(ls artifacts/research/ 2>/dev/null | grep -oE '^[0-9]+' | sort -n | tail -1)
+   NNN=$(printf '%03d' $(( ${HIGHEST:-0} + 1 )))
    source artifacts/db.sh
-   NNN=$(printf '%03d' $(( $(sqlite3 artifacts/project.db "SELECT COUNT(*) FROM artifacts WHERE skill='research-plan' AND phase='plan';" 2>/dev/null || echo 0) + 1 )))
    db_upsert 'research-plan' 'plan' "$NNN" "$PLAN_CONTENT"
    ```
+   This extracts leading digits from all folder names (both `NNN` and `NNND`),
+   finds the highest, and increments. Do NOT use `COUNT(*)` from the DB — it
+   misses deep research folders and causes collisions.
 
 8. **Present for approval.** Show the plan. Wait for user to approve scope.
    If `--plan-only`, stop here.
@@ -209,51 +215,49 @@ context and scope instructions.
    db_upsert 'research-execute' 'counter' '{NNN}/sonnet' "$COUNTER_CONTENT"
    ```
 
-   **Counter 2 — Gemini CLI:**
-   ```bash
-   bash skills/gemini/scripts/gemini-exec.sh research \
-     --output /tmp/counter-gemini.md \
-     "Read this research synthesis and challenge it. Identify weak
-   evidence, missing angles, and overclaimed conclusions. Be adversarial.
+   **Counter 2 — Sonnet subagent with WebSearch:**
+   Spawn a second Sonnet subagent with WebSearch tool access. Prompt:
+   "You have WebSearch. Read this research synthesis and challenge it.
+   Identify weak evidence, missing angles, overclaimed conclusions, and
+   recent developments the synthesis doesn't reflect. Be adversarial.
    $(cat artifacts/research/summary/{NNN}-{topic-slug}.md)"
-   ```
-   Then store in DB:
+   After it returns, store in DB:
    ```bash
-   source artifacts/db.sh && db_upsert 'research-execute' 'counter' '{NNN}/gemini' "$(cat /tmp/counter-gemini.md)" && rm /tmp/counter-gemini.md
+   source artifacts/db.sh && db_upsert 'research-execute' 'counter' '{NNN}/sonnet-web' "$AGENT_RESPONSE"
    ```
 
-   **Counter 3 — Codex CLI:** Write a temp prompt file containing the
-   synthesis plus counter instructions, then invoke:
-   ```bash
-   bash skills/codex/scripts/codex-exec.sh review \
-     --output /tmp/counter-codex.md \
-     --stdin /tmp/counter-codex-prompt.md
+   **Counter 3 — Codex MCP:** Build a prompt containing the synthesis plus
+   counter instructions, then call `mcp__codex-mcp__codex_run`:
+   ```json
+   {
+     "mode": "review",
+     "cwd": "<project-root>",
+     "prompt": "[COUNTER_CODEX_PROMPT]",
+     "timeout_sec": 300
+   }
    ```
-   The prompt file (`/tmp/counter-codex-prompt.md`) should contain:
+   `[COUNTER_CODEX_PROMPT]` should contain:
    `"Review this research synthesis for technical accuracy. Flag any claims
    about libraries, frameworks, or APIs that are outdated or incorrect."`
    followed by the contents of `artifacts/research/summary/{NNN}-{topic-slug}.md`.
    Then store in DB:
    ```bash
-   source artifacts/db.sh && db_upsert 'research-execute' 'counter' '{NNN}/codex' "$(cat /tmp/counter-codex.md)" && rm /tmp/counter-codex.md
+   source artifacts/db.sh && db_upsert 'research-execute' 'counter' '{NNN}/codex' "$CODEX_FINAL_MESSAGE"
    ```
 
-   Launch all three in parallel. If Gemini fails (unavailable, timeout, or
-   empty output), retry with Copilot as a fallback — load `/copilot` for
-   invocation syntax. Same prompt, 120s timeout. Output to
-   `/tmp/counter-copilot.md`. Then store in DB:
+   Launch all three in parallel. If Codex MCP is unavailable, fall back to
+   Copilot for Counter 3 — load `/copilot` for invocation syntax. Same prompt,
+   120s timeout. Output to `/tmp/counter-copilot.md`. Then store in DB:
    ```bash
    source artifacts/db.sh && db_upsert 'research-execute' 'counter' '{NNN}/copilot' "$(cat /tmp/counter-copilot.md)" && rm /tmp/counter-copilot.md
    ```
-   Store Copilot counters under label `copilot` — they count equivalently to
-   Gemini for synthesis purposes. If both Gemini and Copilot fail, note it
-   and proceed. At minimum, the Sonnet counter always runs.
+   At minimum, the two Sonnet counters always run.
 
 10. **Integrate counter feedback.** Read all counters from the artifact DB:
     ```bash
     source artifacts/db.sh
     COUNTER_SONNET=$(db_read 'research-execute' 'counter' '{NNN}/sonnet')
-    COUNTER_GEMINI=$(db_read 'research-execute' 'counter' '{NNN}/gemini')
+    COUNTER_SONNET_WEB=$(db_read 'research-execute' 'counter' '{NNN}/sonnet-web')
     COUNTER_CODEX=$(db_read 'research-execute' 'counter' '{NNN}/codex')
     ```
     If any counter
@@ -291,9 +295,10 @@ research-execute   / prompt        / {NNN}           — meta-research dispatch 
 research-connector / findings      / {NNN}/{connector} — raw findings per connector
 research-execute   / source-tally  / {NNN}           — aggregate source counts
 research-execute   / topic         / {NNN}/{slug}    — per-topic summaries
-research-execute   / counter       / {NNN}/sonnet    — Sonnet counter
-research-execute   / counter       / {NNN}/gemini    — Gemini counter
-research-execute   / counter       / {NNN}/codex     — Codex counter
+research-execute   / counter       / {NNN}/sonnet     — Sonnet counter
+research-execute   / counter       / {NNN}/sonnet-web — Sonnet WebSearch counter
+research-execute   / counter       / {NNN}/codex      — Codex MCP counter
+research-execute   / counter       / {NNN}/copilot    — Copilot counter (fallback)
 ```
 
 **File (final output — do not change):**
@@ -326,4 +331,4 @@ Action: Create a new run directory. Dispatch only the connectors mapped to
 
 ## Cross-cutting
 
-Before completing, read and follow `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/cross-cutting-rules.md`.

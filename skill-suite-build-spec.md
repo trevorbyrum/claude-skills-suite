@@ -1,5 +1,7 @@
 # Project Skill Suite — Build Spec v2
 
+> ⚠️ **Status (2026-05-20)**: This is the original architecture spec. The Gemini, Cursor, and Vibe driver skills referenced below have been **removed**. Anywhere this document mentions them, the current implementation uses **Codex MCP** (code-centric work) or a **Sonnet subagent** via the Agent tool (research, devil's advocate, web grounding via WebSearch). The 21-parallel-review meta-review pattern (Sonnet + Codex + Gemini) is now 18-20 reviews (Sonnet + Codex only). Authoritative current state: `README.md`, `project-context.md`, `rules/general.md`, individual SKILL.md files, and `references/cross-cutting-rules.md`.
+
 > This document defines a complete skill suite for project lifecycle management.
 > Build all skills, meta-skills, hooks, templates, and references described below.
 > Target location: a shared folder accessible across multiple machines.
@@ -9,12 +11,12 @@
 - **25 atomic skills** — each does one thing well, has its own SKILL.md
 - **4 meta-skill orchestrators** — chain atomic skills, manage parallel fan-out
 - **5 Claude Code hooks** — deterministic, guaranteed execution on lifecycle events
-- **2 utility skills** (`/gemini`, `/codex`) — encode exact CLI syntax so other skills don't guess
+- **Driver interfaces** — `codex-mcp` MCP tools plus `/gemini`, `/vibe`, `/cursor`, and `/copilot` driver skills so other skills don't guess invocation details
 - **Multi-model reviews** — 7 review lenses × 3 model families (Sonnet + Codex + Gemini) = 21 parallel reviews
 - **Agent-agnostic skills** — SKILL.md follows the open Agent Skills standard (Claude Code, Cursor, Gemini CLI, Codex CLI, Copilot)
 - **Claude Code hooks** — hooks are Claude Code specific
 - **Subagent defaults**: Sonnet, high effort. For non-Claude agents, instruct "use highest available reasoning effort"
-- **Codex worker pool**: max 5 concurrent `codex exec` sessions at any time
+- **Codex worker pool**: max 5 concurrent `codex-mcp` jobs at any time
 - **Cross-device**: skills live in a shared folder, templates use relative paths
 
 ## Skill Writing Rules
@@ -38,7 +40,7 @@ Follow these rules when writing every SKILL.md:
 7. Every skill must include the cross-cutting footer (see Cross-Cutting Rules section).
 8. Define clear exit conditions so chains know when to advance.
 9. Files are the handoff mechanism between skills — each skill produces .md artifacts the next skill consumes.
-10. Skills that use Codex or Gemini must reference the `/codex` or `/gemini` utility skills for exact CLI syntax — never inline the commands. Include a `## Multi-Model Execution` section specifying: task type, prompt template, output file path, and fallback behavior.
+10. Skills that use Codex must call `codex-mcp` MCP tools directly; the Codex utility skill has been removed. Skills that use Gemini must reference `/gemini` for exact CLI syntax. Include a `## Multi-Model Execution` section specifying: task type, prompt template, output destination, concurrency, and fallback behavior.
 
 ## Folder Structure to Create
 
@@ -336,7 +338,7 @@ The cross-cutting rules are:
   4. **Triple-counter** — fan out 3 counter-reviewers in parallel:
      - **Sonnet subagent**: Fresh eyes, no context bleed. Reads only the synthesis. Challenges completeness, flags gaps. Writes `sonnet_counter.md`.
      - **Gemini CLI** (per `/gemini` skill, task type: counter-review): Different model family. Web-grounded fact check. Challenges claims lacking evidence, missing perspectives, ignored contradictions. Pipe synthesis via stdin. Writes `gemini_counter.md`.
-     - **Codex CLI** (per `/codex` skill, task type: read-only review): Code-focused feasibility check. Challenges implementation gaps, unvalidated libraries, missing technical details. Writes `codex_counter.md`.
+     - **Codex MCP** (`mcp__codex-mcp__codex_run`, mode `review`): Code-focused feasibility check. Challenges implementation gaps, unvalidated libraries, missing technical details. Stores the final message as the Codex counter.
   5. Main agent reads all 3 counter files. Compares findings across model families. Multi-model agreement on a gap = high confidence it's real. Updates synthesis if gaps are real. Asks user if additional research run (002, 003...) is needed.
 - **Run numbering**: Sequential — 001, 002, 003. Each run gets its own folder under research/runs/.
 - **Fallback**: If Gemini/Codex unavailable, note "External counter skipped — [CLI] unavailable" and proceed with Sonnet counter only. If subagents are unavailable entirely, execute sequentially — one connector at a time, same file outputs.
@@ -350,7 +352,7 @@ The cross-cutting rules are:
 - **Exit condition**: project-plan.md written and user approves
 - **Subagent**: No
 - **Gemini integration**: Call `/gemini` (task type: research) for competitive landscape and similar project approaches. Write findings to temp file, incorporate into plan.
-- **Codex integration**: Call `/codex` (task type: read-only review) for technical feasibility check on proposed architecture. Write findings to temp file, incorporate into plan.
+- **Codex integration**: Call `mcp__codex-mcp__codex_run` with `mode: "review"` for technical feasibility check on proposed architecture. Incorporate the final message into the plan.
 - **Template to bundle**: plan-template.md with sections for phases, milestones, technical approach, work unit decomposition, dependencies, risks, and timeline. Each work unit should be tagged as parallelizable or sequential.
 
 ### 8. github-sync
@@ -422,7 +424,7 @@ The cross-cutting rules are:
 - **Outputs**: /docs/counter-review-findings.md (unified), plus per-model files during multi-model execution
 - **Exit condition**: Findings documented with severity and recommendations. Context + features drift flagged.
 - **Subagent**: Sonnet (primary reviewer)
-- **Multi-model execution**: When called by project-review, also runs via `/codex` and `/gemini` with the same review prompt. See Multi-Model Review Architecture section.
+- **Multi-model execution**: When called by project-review, also runs via `codex-mcp` and `/gemini` with the same review prompt. See Multi-Model Review Architecture section.
 
 ### 15. security-review
 
@@ -432,7 +434,7 @@ The cross-cutting rules are:
 - **Outputs**: /docs/security-review-findings.md
 - **Exit condition**: Security findings documented with severity, risk, and remediation recommendations
 - **Subagent**: Sonnet (primary reviewer)
-- **Multi-model execution**: When called by project-review, also runs via `/codex` and `/gemini`.
+- **Multi-model execution**: When called by project-review, also runs via `codex-mcp` and `/gemini`.
 
 ### 16. test-review
 
@@ -442,7 +444,7 @@ The cross-cutting rules are:
 - **Outputs**: /docs/test-review-findings.md
 - **Exit condition**: Coverage gaps documented, fragile tests flagged, recommendations provided
 - **Subagent**: Sonnet (primary reviewer)
-- **Multi-model execution**: When called by project-review, also runs via `/codex` and `/gemini`.
+- **Multi-model execution**: When called by project-review, also runs via `codex-mcp` and `/gemini`.
 
 ### 17. refactor-review
 
@@ -452,7 +454,7 @@ The cross-cutting rules are:
 - **Outputs**: /docs/refactor-review-findings.md
 - **Exit condition**: Findings documented with specific refactor recommendations. Context + features drift flagged.
 - **Subagent**: Sonnet (primary reviewer)
-- **Multi-model execution**: When called by project-review, also runs via `/codex` and `/gemini`.
+- **Multi-model execution**: When called by project-review, also runs via `codex-mcp` and `/gemini`.
 
 ### 18. drift-review
 
@@ -462,7 +464,7 @@ The cross-cutting rules are:
 - **Outputs**: /docs/drift-review-findings.md
 - **Exit condition**: Drift documented: what docs say vs what code does, with specific file references
 - **Subagent**: Sonnet (primary reviewer)
-- **Multi-model execution**: When called by project-review, also runs via `/codex` and `/gemini`.
+- **Multi-model execution**: When called by project-review, also runs via `codex-mcp` and `/gemini`.
 - **Notes**: This is the "does reality match the plan?" lens. Separate from counter-review (which challenges whether the plan is good) and refactor-review (which challenges how code is written). Drift-review challenges whether code matches what we said we'd build.
 
 ### 19. completeness-review
@@ -473,7 +475,7 @@ The cross-cutting rules are:
 - **Outputs**: /docs/completeness-review-findings.md
 - **Exit condition**: All placeholders, stubs, and incomplete implementations documented with file:line references
 - **Subagent**: Sonnet (primary reviewer)
-- **Multi-model execution**: When called by project-review, also runs via `/codex` and `/gemini`.
+- **Multi-model execution**: When called by project-review, also runs via `codex-mcp` and `/gemini`.
 - **Notes**: Pattern scan targets: `TODO`, `FIXME`, `HACK`, `XXX`, `PLACEHOLDER`, `console.log`, `debugger`, `print(`, empty function bodies, hardcoded `localhost`, test-only values in production code, `// removed`, `// temporary`.
 
 ### 20. compliance-review
@@ -484,7 +486,7 @@ The cross-cutting rules are:
 - **Outputs**: /docs/compliance-review-findings.md
 - **Exit condition**: Rule violations documented with source rule quoted, severity, and fix recommendation
 - **Subagent**: Sonnet (primary reviewer)
-- **Multi-model execution**: When called by project-review, also runs via `/codex` and `/gemini`.
+- **Multi-model execution**: When called by project-review, also runs via `codex-mcp` and `/gemini`.
 - **Notes**: For each finding, the reviewer must cite the specific rule being violated (quote it, don't paraphrase). If the rule isn't explicitly documented, it's not a compliance violation — it's a suggestion. This prevents pedantic false positives.
 
 ### 21. gemini
@@ -550,101 +552,60 @@ The cross-cutting rules are:
   # If GOOGLE_CLOUD_PROJECT is set and causing issues, unset it
   ```
 
-### 22. codex
+### 22. codex-mcp
 
-- **Phase**: Utility (referenced by other skills)
-- **Purpose**: Encode exact Codex CLI syntax, flags, gotchas, and task-type command templates so other skills reference this instead of guessing. This is a driver skill, not a standalone task. Max 5 concurrent `codex exec` sessions.
-- **Inputs**: Task type, prompt, output file path, working directory
-- **Outputs**: Codex CLI output written to specified file
-- **Exit condition**: Output file written, or fallback noted
-- **Subagent**: No (this IS the external call)
-- **Availability check**: Resolve dynamically via `whence -p` in zsh or `type -P` in bash, then Homebrew, then an NVM filesystem search that allows symlinks. Prepend the resolved bin dir to `PATH` only when needed for NVM-backed installs:
-  `if command -v whence >/dev/null 2>&1; then CODEX=$(whence -p codex 2>/dev/null); elif type -P codex >/dev/null 2>&1; then CODEX=$(type -P codex 2>/dev/null); else CODEX=$(command -v codex 2>/dev/null); fi; test -x "$CODEX" || CODEX="/opt/homebrew/bin/codex"; if [ ! -x "$CODEX" ] && [ -d "$HOME/.nvm/versions/node" ]; then CODEX=$(find "$HOME/.nvm/versions/node" -path '*/bin/codex' \( -type f -o -type l \) 2>/dev/null | sort -V | tail -1); fi; test -x "$CODEX" && export PATH="$(dirname "$CODEX"):$PATH"; test -x "$CODEX"`
-- **Concurrency limit**: 5 simultaneous `codex exec` processes. The orchestrating agent must track active slots and queue excess work. Track via `/tmp/codex-slots.pid` — before launching, count active PIDs in the file (`ps -p` to verify still running, prune dead entries). If 5 active, queue and retry after the next slot frees. This is best-effort — the file is a coordination hint, not a hard lock.
+- **Phase**: MCP broker interface (referenced by other skills)
+- **Purpose**: Provide typed Claude Code tools for Codex delegation so skills do not construct raw `codex exec` commands. The Codex slash skill has been removed.
+- **Inputs**: mode, prompt, working directory, optional `add_dirs`, optional timeout.
+- **Outputs**: MCP result metadata and final Codex message.
+- **Exit condition**: Final message returned, job status recorded, or fallback noted.
+- **Subagent**: No (this is the external Codex call through MCP).
+- **Availability check**: Call `mcp__codex-mcp__codex_health` with the project cwd.
+- **Concurrency limit**: 5 simultaneous Codex MCP jobs. Use `codex_start`/`codex_status`/`codex_result` for parallel or long-running work and queue excess jobs.
 - **Task-type templates**:
 
-  **Code review (read-only, safest):**
-  ```bash
-  RESULT=$($GTIMEOUT 120 "$CODEX" exec --ephemeral --skip-git-repo-check \
-    -c 'mcp_servers.homelab-gateway.enabled=false' \
-    -c 'mcp_servers.ssh-tower.enabled=false' \
-    -c 'mcp_servers.github.enabled=false' \
-    --sandbox read-only -C <project-root> \
-    "PROMPT" 2>/dev/null)
-  echo "$RESULT" > OUTPUT_FILE
+  **Code review / debate (read-only):**
+  ```json
+  {
+    "mode": "review",
+    "cwd": "<project-root>",
+    "prompt": "PROMPT",
+    "timeout_sec": 300
+  }
   ```
 
-  **Code review with high reasoning:**
-  ```bash
-  RESULT=$($GTIMEOUT 120 "$CODEX" exec --ephemeral --skip-git-repo-check \
-    -c 'mcp_servers.homelab-gateway.enabled=false' \
-    -c 'mcp_servers.ssh-tower.enabled=false' \
-    -c 'mcp_servers.github.enabled=false' \
-    --sandbox read-only -C <project-root> \
-    -c model_reasoning_effort="high" \
-    "PROMPT" 2>/dev/null)
-  echo "$RESULT" > OUTPUT_FILE
+  **Code generation / file writes:**
+  ```json
+  {
+    "mode": "generate",
+    "cwd": "<project-root>",
+    "prompt": "PROMPT",
+    "timeout_sec": 300
+  }
   ```
 
-  **Code generation / file writes (implementation work):**
-  ```bash
-  $GTIMEOUT 180 "$CODEX" exec --ephemeral --skip-git-repo-check \
-    -c 'mcp_servers.homelab-gateway.enabled=false' \
-    -c 'mcp_servers.ssh-tower.enabled=false' \
-    -c 'mcp_servers.github.enabled=false' \
-    --sandbox workspace-write -C /path/to/project \
-    "PROMPT" 2>/dev/null
+  **Async parallel work:**
+  ```json
+  {
+    "mode": "review",
+    "cwd": "<project-root>",
+    "add_dirs": ["<relevant-dir>"],
+    "prompt": "PROMPT",
+    "timeout_sec": 300
+  }
   ```
-
-  **Structured output (for downstream parsing):**
-  ```bash
-  $GTIMEOUT 120 "$CODEX" exec --ephemeral --skip-git-repo-check \
-    --output-schema /path/to/schema.json \
-    -o OUTPUT_FILE \
-    "PROMPT" 2>/dev/null
-  ```
-
-  **Write final message to file:**
-  ```bash
-  $GTIMEOUT 120 "$CODEX" exec --ephemeral --skip-git-repo-check -o OUTPUT_FILE \
-    "PROMPT" 2>/dev/null
-  ```
-
-  **Long prompt via stdin:**
-  ```bash
-  $GTIMEOUT 120 "$CODEX" exec --ephemeral --skip-git-repo-check - < /path/to/prompt.md 2>/dev/null
-  ```
-
-  **With additional read-only directories:**
-  ```bash
-  $GTIMEOUT 120 "$CODEX" exec --ephemeral --skip-git-repo-check -C /project --add-dir /shared/libs \
-    "PROMPT" 2>/dev/null
-  ```
+  Start with `mcp__codex-mcp__codex_start`, poll with `codex_status`, and fetch with `codex_result`.
 
 - **Critical gotchas**:
-  - ALWAYS wrap with `$GTIMEOUT` — hangs indefinitely if out of credits or the network stalls
-  - Prefer `whence -p codex` in zsh shells or `type -P codex` in bash; `command -v codex` can return alias text instead of an executable path. If that misses, fall back to `/opt/homebrew/bin/codex`, then search NVM and allow symlinked `bin/codex`
-  - `-p` is `--profile`, NOT prompt. The prompt is a positional final argument.
-  - Do not rely on the default sandbox. Pass `--sandbox read-only` for review tasks and `--sandbox workspace-write` for file writes
-  - Network is blocked by default in `workspace-write` sandbox
-  - Use `--skip-git-repo-check` on all headless invocations. It is harmless in repos and required outside them.
-  - `--ephemeral` for one-shot tasks (don't persist session state)
-  - For lightweight local tasks, disable MCP servers with `-c 'mcp_servers.<name>.enabled=false'` to avoid startup latency
-  - `codex exec fork` doesn't exist — use `codex exec resume --last` instead
-  - Flag placement matters: global flags go AFTER `exec`, and the prompt goes LAST
-  - Auto-cancels all elicitation requests in exec mode
-  - Long prompts: prefer `codex exec - < file.md` over inline quoting
-  - `-C` is valid shorthand for `--cd <DIR>`
-  - `--json` outputs JSONL event stream, not a single JSON object — avoid for simple output capture
-  - Model comes from `~/.codex/config.toml` (currently `gpt-5.4` on this machine), reasoning effort: `minimal|low|medium|high`
-  - For headless: use `OPENAI_API_KEY` env var, not ChatGPT subscription OAuth
-- **Strengths**: Code review and quality analysis, test generation, structured output via `--output-schema`, fast code generation, code pattern detection
-- **Weaknesses**: Network blocked by default, non-code tasks, can hang on credit exhaustion, auto-cancels interactive prompts
-- **Fallback**: If unavailable or timeout, skip and note "Codex unavailable". No direct substitute.
-- **Environment safety**:
-  ```bash
-  export OPENAI_API_KEY="$OPENAI_API_KEY"
-  ```
+  - Do not call raw `codex exec`.
+  - Do not use any legacy Codex shell wrapper.
+  - Keep `review` and `debate` read-only.
+  - Use `generate` for file writes.
+  - Use `full_access` only when explicitly approved.
+  - Prompts must be self-contained; Codex calls are stateless.
+  - If `codex_health` fails, skip Codex and note the broker error.
+- **Strengths**: Code review and quality analysis, test generation, fast code generation, code pattern detection.
+- **Fallback**: If unavailable or timed out, skip and note "Codex MCP unavailable" or reassign to Sonnet where the workflow allows it.
 
 ### 23. skill-doctor
 
@@ -661,10 +622,10 @@ The cross-cutting rules are:
   4. All templates exist
   5. references/cross-cutting-rules.md exists
   6. `which gemini` — available or not
-  7. Resolve Codex dynamically (`whence -p` in zsh or `type -P` in bash, then `/opt/homebrew/bin/codex`, then NVM filesystem search with symlink support) — available or not
+  7. `mcp__codex-mcp__codex_health` reports healthy — available or not
   8. Hook configuration in settings.json points to correct paths
   9. Gemini CLI responds to `gemini --version`
-  10. Resolved Codex CLI responds to `"$CODEX" --version`
+  10. Codex MCP smoke job returns `OK`
   11. `which jq` — required by hook scripts for JSON parsing
 
 ### 24. release-prep
@@ -713,7 +674,7 @@ When `project-review` runs, every review lens executes across 3 model families i
 For each of the 7 review lenses:
 
 1. **Sonnet subagent** (primary): Full codebase access via Claude tools. Writes findings to `docs/[lens]-review-sonnet.md`.
-2. **Codex CLI** (per `/codex` skill): Task type `read-only review`, `--ephemeral --sandbox read-only -c model_reasoning_effort="high"`. Receives the same review prompt adapted for single-shot execution. Writes to `docs/[lens]-review-codex.md`. Subject to 5-slot concurrency limit — queue if full.
+2. **Codex MCP** (`mcp__codex-mcp__codex_run` or async flow): Task type `review`, read-only. Receives the same review prompt adapted for single-shot execution. Store the final message as the Codex findings. Subject to 5-job concurrency limit — queue if full.
 3. **Gemini CLI** (per `/gemini` skill): Task type `research/analysis`. Receives the same review prompt adapted for single-shot execution. Writes to `docs/[lens]-review-gemini.md`. **Input assembly**: Claude assembles a single prompt file containing the review instructions + relevant code (key files, not the entire codebase). Use Gemini's `@path/to/file.ts` syntax for up to ~10 key files, or concatenate code into the prompt file and pipe via stdin for larger scopes. Gemini cannot browse the filesystem with MCP tools in headless mode — all code context must be passed explicitly.
 
 ### Confidence Scoring via Multi-Model Agreement
@@ -955,8 +916,8 @@ Sessions restored via `--resume` or `--continue` do not trigger any SessionStart
 
 11. **Multi-model agreement is the confidence signal.** Don't trust a single model's review findings. 3/3 agreement = real issue. 1/3 = likely false positive. This replaces arbitrary scoring rubrics.
 
-12. **Codex for implementation, Claude for orchestration.** project-execute uses Codex as the implementation engine (5-slot worker pool). Claude manages the queue, reviews output, and handles failures. This optimizes cost (Codex on flat-rate subscription) and leverages each model's strengths.
+12. **Codex for implementation, Claude for orchestration.** project-execute uses Codex MCP as the implementation engine (5-job worker pool). Claude manages the queue, reviews output, and handles failures. This optimizes cost (Codex on flat-rate subscription) and leverages each model's strengths.
 
-13. **Every CLI call gets a timeout.** Both Gemini and Codex can hang indefinitely. Never invoke either without `timeout`. The `/gemini` and `/codex` utility skills encode this — other skills reference them, never inline CLI commands.
+13. **Every external call gets a timeout.** Gemini CLI calls use the `/gemini` timeout guidance. Codex MCP calls set `timeout_sec` or use the async status/result flow. Other skills never inline raw Codex CLI commands.
 
 14. **Graceful degradation.** If Gemini is unavailable, fall back to WebSearch. If Codex is unavailable, fall back to Sonnet subagents. If both are down, the suite still works — just with less multi-model coverage. Note what was skipped.

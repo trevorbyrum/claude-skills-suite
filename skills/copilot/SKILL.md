@@ -151,7 +151,6 @@ Do not assume a fixed default model — the CLI auto-routes per task. Pin
 | `claude-haiku-4.5` | Fast, cheap, simple tasks |
 | `gpt-5.4` | Codex-class tasks, structured output |
 | `gpt-5.1-codex` | Code generation and review |
-| `gemini-3-pro-preview` | Large context, web research |
 
 ## Concurrency Limit (MANDATORY)
 
@@ -161,13 +160,14 @@ request from GitHub Copilot quota. The wrapper enforces this via PID file
 
 ## Fallback Behavior
 
-**Codex is Copilot's primary fallback.** Copilot itself is Gemini's fallback —
-if both Gemini and Copilot fail, fall back to WebSearch (research) or skip (review).
+**Codex MCP and Sonnet subagents are Copilot's fallbacks.** If Copilot fails,
+prefer Codex MCP for code-centric tasks and a Sonnet subagent (with WebSearch
+for web grounding) for research/devil's-advocate tasks.
 
 | Failure | Exit Code | Fallback |
 |---------|-----------|----------|
-| CLI not installed | 1 | Codex; then Claude direct |
-| Timeout | 124 | Retry once with `--timeout 240`; then Codex |
+| CLI not installed | 1 | Codex MCP; then Claude direct |
+| Timeout | 124 | Retry once with `--timeout 240`; then Codex MCP |
 | Quota exhausted | 0 or 4 | Skip and note "Copilot quota exhausted" |
 | Empty output | 4 | Retry once; then skip |
 | All slots full | 2 | Wait and retry; then skip |
@@ -193,4 +193,4 @@ invocation syntax" pattern is replaced with direct wrapper calls.
 
 ---
 
-Before completing, read and follow `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/cross-cutting-rules.md`.

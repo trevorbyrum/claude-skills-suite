@@ -1,6 +1,7 @@
 ---
 name: log-review
 description: Audits logging and observability gaps — silent catches, missing context, no structured logging, absent trace IDs. Use before deploys or after implementation sprints.
+disable-model-invocation: true
 ---
 
 # Log Review
@@ -159,4 +160,4 @@ User: We're moving to microservices. Is our logging ready?
 
 ---
 
-Before completing, read and follow `../references/review-lens-framework.md` and `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/review-lens-framework.md` and `references/cross-cutting-rules.md`.

@@ -1,6 +1,7 @@
 ---
 name: meta-pivot
 description: "Orchestrates project pivot: direction interview, context rewrite, analysis, adversarial triage, wave removal, verification. Invoke with /meta-pivot."
+disable-model-invocation: true
 ---
 
 # meta-pivot
@@ -17,19 +18,19 @@ in risk-ordered waves — while keeping humans in the loop for every irreversibl
 choice.
 
 **Context-window strategy**: Main thread handles orchestration + human gates only.
-Heavy analysis dispatched to Opus subagent. Adversarial debate via Codex + Gemini
-CLIs. Wave execution via Opus subagent per wave. Never load atomic skill files
-into main context — subagents read them.
+Heavy analysis dispatched to Opus subagent. Adversarial debate via Codex MCP +
+Sonnet subagent. Wave execution via Opus subagent per wave. Never load atomic
+skill files into main context — subagents read them.
 
 ```text
 Delegation key:
   [I] = inline     — stays in main thread, user interaction
   [S] = subagent   — Opus or Sonnet, runs out of main context
-  [W] = worker     — CLI agent (Codex, Gemini, Copilot)
+  [W] = worker     — Codex MCP (debate or review mode)
 
   Project Review[S:Sonnet] + Mode Detect[I] -> Interview[I]
     -> Context Rewrite[I] -> Deep Analysis[S:Opus]
-    -> Adversarial I[W:Codex+Gemini] -> Triage[I] -> Adversarial II[W:Codex+Gemini]
+    -> Adversarial I[W:Codex+S:Sonnet] -> Triage[I] -> Adversarial II[W:Codex+S:Sonnet]
     -> Decision Log[I] -> Wave Execution[S:Opus per wave]
     -> Verification[S:Sonnet] -> meta-review[skill] -> Doc Update[S:Sonnet]
 ```
@@ -81,7 +82,7 @@ Before asking any questions, understand the project first.
 **Step 2 — Full project analysis (while waiting or after answer):**
 
 Dispatch a Sonnet subagent to review the entire project state. The subagent reads:
-- `project-context.md`, `project-plan.md`, `features.md`, `todo.md`, `cnotes.md`
+- `project-context.md`, `project-plan.md`, `features.md`, `todo.md`
 - Scans `src/` (or equivalent) for codebase structure, entry points, module map
 - Checks git log for recent direction-suggestive commits
 - Reads any existing `artifacts/` for prior review/research findings
@@ -159,7 +160,6 @@ This phase depoisons all project documentation so downstream agents read the
    to reflect the new direction. These updates are autonomous — no per-file gate:
    - `features.md` — mark removed features, add new ones
    - `todo.md` — remove irrelevant tasks, add pivot-related ones
-   - `cnotes.md` — add a note logging the direction change (coterie format)
 6. Append Phase 2 results to `artifacts/general/pivot-summary.md`.
 
 **Exit condition**: project-context.md and project-plan.md reflect the new direction.
@@ -192,7 +192,7 @@ db_upsert 'impact-analysis' 'dep-graph' 'latest' "$(cat /tmp/pivot-analysis-depg
 Generate draft `artifacts/general/pivot-plan.md` from `templates/pivot-plan-template.md`
 with the candidate list and blast radius data. Append Phase 3 results to pivot-summary.md.
 
-### Phase 3.5: Adversarial Challenge I [W, Codex+Gemini]
+### Phase 3.5: Adversarial Challenge I [W, Codex+Sonnet]
 
 Before presenting candidates to the user, challenge them with adversarial reviewers.
 
@@ -202,23 +202,28 @@ Write the debate prompt to `/tmp/pivot-debate-candidates.md` containing:
 - Instructions: "Challenge these removal candidates. Flag false positives, missed
   dependencies, items that should NOT be removed, and items missing from the list."
 
-Dispatch in parallel (respect concurrency limits — Codex max 5, Gemini max 2):
+Dispatch in parallel (Codex MCP max 5 concurrent, Sonnet subagents have no
+hard limit):
 
-1. **Codex**: Load `/codex` driver for invocation syntax.
-   ```bash
-   bash skills/codex/scripts/codex-exec.sh review \
-     --output /tmp/pivot-debate-codex.md \
-     --timeout 120 \
-     --stdin /tmp/pivot-debate-candidates.md
+1. **Codex MCP**: Call `mcp__codex-mcp__codex_run`.
+   ```json
+   {
+     "mode": "debate",
+     "cwd": "<project-root>",
+     "prompt": "[contents of /tmp/pivot-debate-candidates.md]",
+     "timeout_sec": 300
+   }
    ```
+   Store the final message at `/tmp/pivot-debate-codex.md`.
 
-2. **Gemini**: Load `/gemini` driver for invocation syntax.
-   Use the Research / Analysis template with 120s timeout.
-   Output to `/tmp/pivot-debate-gemini.md`.
+2. **Sonnet subagent**: Spawn a contrarian Sonnet subagent (`general-purpose`)
+   that has NOT participated in Phase 3, with the same prompt. The subagent
+   returns its assessment as text; the main thread writes it to
+   `/tmp/pivot-debate-sonnet.md`.
 
 **Fallback chain**:
-- Codex fails → Sonnet subagent with same prompt
-- Gemini fails → Copilot (load `/copilot`) → Sonnet subagent
+- Codex fails → second Sonnet subagent with same prompt
+- Sonnet subagent fails → Copilot (load `/copilot`) with same prompt
 - At minimum 2 reviewers must complete
 
 After all return, merge disagreements into the candidate list:
@@ -250,7 +255,7 @@ both RICE scores and MoSCoW categories.
 **Exit condition**: User has approved the triage. Every candidate has a
 keep/cut/simplify decision.
 
-### Phase 4.5: Adversarial Challenge II [W, Codex+Gemini]
+### Phase 4.5: Adversarial Challenge II [W, Codex+Sonnet]
 
 After triage but before logging, challenge the cut decisions.
 
@@ -261,7 +266,8 @@ Write debate prompt to `/tmp/pivot-debate-triage.md` containing:
   dependents, items being kept that contradict the new direction, wave ordering
   errors, and external dependencies that would break."
 
-Same dispatch pattern as Phase 3.5 (Codex + Gemini, same fallback chain).
+Same dispatch pattern as Phase 3.5 (Codex MCP + Sonnet subagent, same fallback
+chain).
 
 Present challenges to user. User can:
 - **Revise** — go back to Phase 4 with adjustments
@@ -417,7 +423,7 @@ Agent prompt templates:
 
 - `agents/project-review.md` — Sonnet subagent for Phase 1 project analysis
 - `agents/deep-analysis.md` — Opus subagent for Phase 3
-- `agents/adversarial-debate.md` — Codex + Gemini debate protocol for Phases 3.5, 4.5
+- `agents/adversarial-debate.md` — Codex MCP + Sonnet subagent debate protocol for Phases 3.5, 4.5
 - `agents/wave-executor.md` — Opus subagent for Phase 6
 - `agents/verification.md` — Sonnet subagent for Phase 7
 - `agents/doc-update.md` — Sonnet subagent for Phase 8
@@ -456,4 +462,4 @@ User: "Just analyze what we could remove, don't actually delete anything"
 
 ---
 
-Before completing, read and follow `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/cross-cutting-rules.md`.

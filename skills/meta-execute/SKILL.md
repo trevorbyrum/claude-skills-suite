@@ -1,42 +1,42 @@
 ---
 name: meta-execute
-description: Parallel implementation from a build plan using cross-model Best-of-2 (Vibe+Cursor) and 5-reviewer panel. Use when an approved project-plan.md exists and multi-unit execution should begin.
+description: Parallel implementation from a build plan using Codex MCP generation and a 3-4 reviewer panel. Use when an approved project-plan.md exists and multi-unit execution should begin.
 ---
 
 # meta-execute
 
 Meta-skill that decomposes a build plan into work units and executes them in
-parallel using cross-model generation (Vibe + Cursor), with a 5-reviewer
-panel (Codex + Sonnet + Cursor + Copilot + Gemini) and Claude as orchestrator.
+parallel using Codex MCP for generation, with a 3-4 reviewer panel
+(Codex review+fix, Sonnet subagent rubric, Sonnet subagent architecture,
++ optional Copilot) and Claude as orchestrator.
 
-**Context-window strategy**: Implementation runs in Vibe/Cursor workers.
-Reviews run in Codex + subagents. The main thread only handles orchestration
-(queue management, verdict synthesis, retry decisions) — never reads full
-implementation code for comprehension. Exception: the main thread MAY run
-mechanical verification commands (lint, type-check, grep for stubs) via Bash
-for Best-of-2 candidate selection.
+**Context-window strategy**: Implementation runs in Codex MCP workers.
+Reviews run in Codex + Sonnet subagents. The main thread only handles
+orchestration (queue management, verdict synthesis, retry decisions) —
+never reads full implementation code for comprehension. Exception: the main
+thread MAY run mechanical verification commands (lint, type-check, grep for
+stubs) via Bash to gate candidate selection.
 
 **Research basis**: Design principles from 002D deep research
 (208 cited sources). Key insight: orchestration topology > model selection >
-prompt engineering. Cross-model Best-of-N provides more diversity than
-same-model N>1. See `artifacts/research/summary/002D-meta-execute-quality.md`.
+prompt engineering. Per-wave review gate provides stronger convergence than
+chasing per-WU model diversity. See
+`artifacts/research/summary/002D-meta-execute-quality.md`.
 
 ```
 Delegation key:
-  [S] = subagent   — runs out of main context
-  [I] = inline     — stays in main thread
-  [V] = Vibe       — Mistral CLI (fast generation)
-  [C] = Cursor     — Cursor Agent CLI (generation or review)
-  [X] = Codex      — Codex CLI (review+fix)
-  [W] = worker     — any external CLI agent (disposable)
+  [S] = subagent     — runs out of main context (Sonnet)
+  [I] = inline       — stays in main thread
+  [X] = Codex MCP    — codex-mcp generation or review
+  [P] = Copilot      — optional 4th reviewer (read-only)
 
   Decomposition[I] -> Pool Setup[I] ->
-    ┌──────────────────── per wave ────────────────────┐
-    │ Context Assembly[I] -> Generation[V+C]            │
-    │   -> Verify & Pick[I] -> 5-Reviewer Panel[X+S+C] │
-    │   -> Merge[I] -> github-sync -> meta-review       │
-    │   -> User Approval Gate                           │
-    └──────────────────────────────────────────────────┘
+    ┌──────────────────── per wave ─────────────────────┐
+    │ Context Assembly[I] -> Generation[X]               │
+    │   -> Verify[I] -> 3-4 Reviewer Panel[X+S+S(+P)]   │
+    │   -> Merge[I] -> github-sync -> meta-review        │
+    │   -> User Approval Gate                            │
+    └───────────────────────────────────────────────────┘
     -> Completion[I]
 ```
 
@@ -122,44 +122,27 @@ Wave assignments are visible and correct.
 
 ### Phase 2: Worker Pool Setup [Inline]
 
-Check availability of all CLIs:
-- **Codex**: `bash skills/codex/scripts/codex-exec.sh review --skip-concurrency --timeout 10 "Reply OK" > /dev/null 2>&1` (exit 0 = available, exit 1 = unavailable)
-- **Vibe**: load `/vibe` for path resolution
-- **Cursor**: load `/cursor` for path resolution
-- **Copilot**: load `/copilot` for path resolution
-- **Gemini**: load `/gemini` for path resolution
+Check availability of external agents:
+- **Codex MCP**: call `mcp__codex-mcp__codex_health` with `cwd: <project-root>` (healthy = available). REQUIRED.
+- **Copilot** (optional 4th reviewer): load `/copilot` for path resolution.
+- **Sonnet subagents**: always available (managed by Claude runtime).
 
-Note which CLIs are available (available / unavailable) before proceeding.
+If Codex MCP is unavailable, fall back to Sonnet subagent generation
+(see "Fallback Generators" below). Copilot is optional — skip if unavailable.
 
-**Generation requires both Vibe AND Cursor** for cross-model Best-of-2. If
-either is unavailable, fall back:
-- Vibe unavailable → use Codex as second generator alongside Cursor
-- Cursor unavailable → use Codex as second generator alongside Vibe
-- Both unavailable → fall back to Codex-only Best-of-2 (original pattern)
-- Note any fallbacks to the user.
+**Pool limits — generation**:
+- Codex MCP: max **5 concurrent** (hard limit from general.md)
+- Generation: each WU consumes 1 Codex slot
+- Trivial units (<50 LOC, single file): same single-slot Codex generation
 
-**Review requires Codex** (the only reviewer that applies fixes). If Codex is
-unavailable, fall back to Sonnet subagents for all 5 review slots.
-Copilot and Gemini are optional reviewers — skip if unavailable.
-
-**Pool limits — generation** (conservative start, raise after validation):
-- Vibe: **2 concurrent** (hard max: 3)
-- Cursor: **2 concurrent** (hard max: 3)
-- Best-of-2: each WU consumes 1 Vibe + 1 Cursor slot → **2 WUs at a time**
-- Trivial units (<50 LOC, single file): Skip Best-of-2, use Vibe-only (N=1)
-
-**Pool limits — review** (5-reviewer panel):
-- Codex: 2 concurrent (of 5 max) — reserved for review+fix
-- Cursor `--mode ask`: 2 concurrent (freed from generation as WUs complete)
-- Copilot: 2 concurrent (hard max: 2)
-- Gemini: 2 concurrent (hard max: 2)
-- Sonnet subagents: 2 concurrent (no hard limit, matching review throughput)
-- All 5 reviewers for a single WU run in parallel
-- **2 WUs can be reviewed simultaneously** (Copilot/Gemini bottleneck)
-
-**Pipeline stagger**: Generation and review overlap. When WU-1's generation
-finishes, its Cursor slot frees up for WU-1's review while WU-2's Cursor
-is still generating. This keeps Cursor ≤ 3 total (2 generating + 1 reviewing).
+**Pool limits — review** (3-4 reviewer panel per WU):
+- Codex MCP: review+fix consumes 1 of the 5 Codex slots
+- Sonnet subagents: 2 per WU (rubric + architecture lenses), no hard limit
+- Copilot: 1 per WU (optional), max 2 concurrent globally
+- All 3-4 reviewers for a single WU run in parallel
+- **Concurrency budget**: with Codex used by both generation and review, no
+  more than 5 Codex jobs total — typically 2 WUs generating + 2 WUs in
+  review at a time.
 
 ### Phase 3: Context Assembly & Execution Loop [Inline + Workers]
 
@@ -180,30 +163,29 @@ workers' specs, or unrelated files. Irrelevant context actively degrades
 output (AGENTS.md study; SWE-Pruner: 23-54% token reduction with minimal
 quality loss).
 
-#### Generation Strategy: Cross-Model Best-of-2
+#### Generation Strategy: Single Codex MCP
 
-For each work unit, generate **2 candidates** using **different models** in
-parallel. Cross-model diversity provides stronger candidate variation than
-same-model N>1 (SWE-Master TTS, S* framework).
+For each work unit, generate **one candidate** with Codex MCP. Single-model
+generation is simpler than Best-of-N and the post-generation review panel
+provides the diversity needed to catch errors. Codex MCP runs in workspace-
+write mode and modifies files directly.
 
-**Generators:**
-- **Vibe** (Mistral/Codestral) — fast generation, code-optimized
-- **Cursor** (configurable model, default `sonnet-4.6-thinking`) — full
-  tool access, built-in worktree isolation
+1. Dispatch one Codex MCP `generate` job (read the worker prompt from
+   `agents/worker.md`, fill placeholders, and pass via the `prompt` field):
+   ```json
+   {
+     "mode": "generate",
+     "cwd": "<project-root>",
+     "add_dirs": ["<worktree-or-feature-path>"],
+     "prompt": "[contents of /tmp/wu-{ID}-prompt.md]",
+     "timeout_sec": 300
+   }
+   ```
+   Use `mcp__codex-mcp__codex_start` to launch asynchronously. Do NOT poll —
+   use `codex_status`/`codex_result` after notification.
 
-1. Dispatch both generators with the **same prompt** (from `agents/worker.md`):
-
-   - **Vibe candidate** — load `/vibe` for invocation syntax. Write prompt to
-     `/tmp/wu-{ID}-prompt.md`, invoke with 180s timeout, `--workdir <project-root>`.
-     Output goes to `/tmp/wu-{ID}-vibe.md`.
-   - **Cursor candidate** — load `/cursor` for invocation syntax. Write prompt to
-     `/tmp/wu-{ID}-prompt.md`, invoke with 300s timeout, worktree `wu-{ID}-cursor`.
-     Output goes to `/tmp/wu-{ID}-cursor-output.md`.
-
-   Launch both with `run_in_background: true`. Do NOT poll.
-
-2. When both complete, run **quick verification** on each candidate via
-   Bash commands (mechanical gate-checking, not code comprehension):
+2. When the job completes, run **quick verification** via Bash
+   commands (mechanical gate-checking, not code comprehension):
    - Lint pass (no errors)
    - Type-check pass (no errors)
    - Unit tests pass (if tests exist)
@@ -211,25 +193,11 @@ same-model N>1 (SWE-Master TTS, S* framework).
 3. Store verification results in the artifact DB for traceability:
    ```bash
    source artifacts/db.sh
-   db_write 'meta-execute' 'verification' '{WU-ID}-vibe' "$VIBE_RESULTS"
-   db_write 'meta-execute' 'verification' '{WU-ID}-cursor' "$CURSOR_RESULTS"
+   db_write 'meta-execute' 'verification' '{WU-ID}-codex' "$CODEX_RESULTS"
    ```
-4. Select the candidate that passes more gates. If tied, prefer the one
-   with fewer LOC (simpler = better). Record the selection:
-   ```bash
-   db_write 'meta-execute' 'selection' '{WU-ID}' "selected: vibe|cursor, reason: ..."
-   ```
-5. If both fail verification, generate a **fresh attempt with a different
-   approach** — do not iterate on either broken candidate. On retry, swap
-   models (e.g., Cursor with a different `--model`, Vibe with a different `--agent` config).
-
-**Exception**: Skip Best-of-2 for trivial units (<50 LOC, single file).
-Use Vibe-only (N=1) for these — it's the fastest generator.
-
-**Vibe output handling**: Vibe generates text output (not file writes).
-After selecting a Vibe candidate, apply the generated code to the project
-files using Claude's Edit tool or a Codex worker with the Vibe output as
-context. Cursor candidates write files directly via `--force`.
+4. If verification fails, classify the failure (see Retry Logic below) and
+   either retry or move on to the review panel — the panel will catch
+   what the gates missed.
 
 #### Queue Management (Wave-Gated)
 
@@ -242,12 +210,11 @@ Maintain a work queue with states: `ready`, `in-progress`, `done`,
 **Within a single wave:**
 
 1. Identify all `ready` units in the **current wave only**.
-2. Assign ready units to worker slots respecting concurrency:
-   - Best-of-2: **2 WUs at a time** (2 Vibe + 2 Cursor slots)
-   - Trivial N=1 (Vibe-only): 2 slots, can mix with 1 Best-of-2 WU
-3. As each generator pair/single completes, run quick verification and select best.
-4. Dispatch 5-reviewer panel for the selected candidate (Phase 4).
-5. Assign the next `ready` unit **from this wave** to freed slots.
+2. Assign ready units to Codex MCP slots (up to 5 concurrent generation jobs,
+   but reserve 1-2 slots for in-flight Codex reviews).
+3. As each Codex generation completes, run quick verification.
+4. Dispatch the 3-4 reviewer panel for the implementation (Phase 4).
+5. Assign the next `ready` unit **from this wave** to the freed slot.
 6. Repeat until all units in this wave are `done` or `failed`.
 7. Track queue state in the artifact DB for resume capability:
    ```bash
@@ -260,7 +227,7 @@ Maintain a work queue with states: `ready`, `in-progress`, `done`,
 8. Merge all completed units from this wave (Phase 5 — sequential rebase).
 9. Commit & push this wave's changes via `/github-sync`.
 10. Run `/meta-review` on the cumulative codebase. This is the **wave gate**
-    — a full 7-lens x 3-model review of the project in its current state.
+    — a full multi-lens review of the project in its current state.
 11. Present the wave summary + meta-review synthesis to the user:
     ```
     Wave N complete.
@@ -285,81 +252,47 @@ cat > /tmp/wu-{ID}-prompt.md << 'PROMPT_EOF'
 PROMPT_EOF
 ```
 
-**Vibe generator** — load `/vibe` for exact invocation syntax. Key params:
-prompt file `/tmp/wu-{ID}-prompt.md`, 180s timeout, `--workdir <project-root>`,
-output to `/tmp/wu-{ID}-vibe-output.md`. Vibe outputs text, not file writes.
+Then dispatch a single Codex MCP `generate` job with the prompt file's
+contents in the `prompt` field. Use `mcp__codex-mcp__codex_start` for
+asynchronous launch (you will be notified when it completes — do not poll).
 
-**Cursor generator** — load `/cursor` for exact invocation syntax. Key params:
-prompt file `/tmp/wu-{ID}-prompt.md`, 300s timeout, worktree `wu-{ID}-cursor`,
-`--workspace <project-root>`, output to `/tmp/wu-{ID}-cursor-output.md`.
-Cursor writes files directly via `--force`.
-
-Use `run_in_background: true` for both Bash calls. Do NOT poll — wait for
-notification of completion.
-
-Store execution output in the artifact DB:
+Store execution output in the artifact DB after the job finishes:
 ```bash
 source artifacts/db.sh
-db_write 'meta-execute' 'execution-log' '{WU-ID}-vibe' "$VIBE_OUTPUT"
-db_write 'meta-execute' 'execution-log' '{WU-ID}-cursor' "$CURSOR_OUTPUT"
+db_write 'meta-execute' 'execution-log' '{WU-ID}-codex' "$CODEX_FINAL_MESSAGE"
 ```
-
-#### Applying Vibe Output
-
-Vibe generates text (code blocks in markdown), not file writes. After
-selecting a Vibe candidate as the winner:
-1. Parse the code blocks from the output
-2. Apply via Claude's Edit/Write tools, OR
-3. Dispatch a short Codex worker with `--sandbox workspace-write` that
-   receives the Vibe output as "implement exactly this code" context
-
-Cursor candidates are already applied via `--force` in the worktree.
 
 #### Fallback Generators
 
-If the primary generators are unavailable:
+If Codex MCP is unavailable, fall back to Sonnet subagent generation:
 
-| Missing CLI | Fallback |
-|-------------|----------|
-| Vibe only | Codex `exec --sandbox workspace-write` as second generator |
-| Cursor only | Codex `exec --sandbox workspace-write` as second generator |
-| Both | Codex Best-of-2 (original pattern) with Sonnet subagent fallback |
-
-Codex fallback invocation:
-```bash
-bash skills/codex/scripts/codex-exec.sh generate \
-  --cd <project-root> \
-  --stdin /tmp/wu-{ID}-prompt.md
-```
-
-Sonnet subagent fallback:
-1. Each subagent receives the same prompt built from `agents/worker.md`.
-2. Use `isolation: "worktree"` for parallel subagents to avoid file conflicts.
+1. Each Sonnet subagent receives the same prompt built from `agents/worker.md`.
+2. Use `isolation: "worktree"` so parallel subagents do not conflict on files.
 3. Subagents have full tool access (Read, Write, Edit, Bash, Grep, Glob).
+4. The Codex reviewer slot in Phase 4 is replaced with a second Sonnet
+   subagent acting as a critique reviewer (read-only).
 
-### Phase 4: 5-Reviewer Panel [Multi-Model]
+### Phase 4: 3-4 Reviewer Panel [Multi-Model]
 
-**Context-window strategy**: Dispatch 5 reviewers per completed work unit
-across different models. Each reviewer scores the code independently. The
-main thread synthesizes verdicts — it never reads full implementation code.
-Codex is the only reviewer that applies fixes; the other 4 are read-only
-advisors.
+**Context-window strategy**: Dispatch 3-4 reviewers per completed work unit.
+Each reviewer scores the code independently. The main thread synthesizes
+verdicts — it never reads full implementation code. Codex MCP is the only
+reviewer that applies fixes; the other reviewers are read-only advisors.
 
 #### Reviewer Panel Composition
 
-All 5 reviewers launch in parallel for each WU. Read `agents/reviewer.md`
+All reviewers launch in parallel for each WU. Read `agents/reviewer.md`
 for the shared review prompt template. Fill in [WU-ID], [description],
 acceptance criteria, conventions, and the **worktree path or branch name**.
 
-| # | Reviewer | CLI | Mode | Role | Invocation |
-|---|----------|-----|------|------|------------|
-| 1 | **Codex** | codex exec | review+fix | Reads code, reviews against rubric, applies fixes in-place | See `agents/codex-reviewer.md` |
-| 2 | **Sonnet** | subagent | Agentic Rubrics | Generates checklist from spec BEFORE reading code | `agents/reviewer.md` (unchanged) |
-| 3 | **Cursor** | agent --mode ask | read-only review | Reviews with thinking model, full codebase access | Read-only, no writes |
-| 4 | **Copilot** | copilot -p | read-only review | Different model perspective (claude/gpt) | Read-only, no writes |
-| 5 | **Gemini** | gemini -p | best practices | Web-grounded review for industry patterns | Read-only, no writes |
+| # | Reviewer | Mode | Role | Invocation |
+|---|----------|------|------|------------|
+| 1 | **Codex MCP** | review+fix | Reads code, reviews against rubric, applies fixes in-place | `mcp__codex-mcp__codex_run` with `mode: "generate"` and `agents/codex-reviewer.md` prompt |
+| 2 | **Sonnet subagent (rubric)** | read-only | Agentic Rubrics — generates checklist from spec BEFORE reading code | `agents/reviewer.md` (rubric pass) |
+| 3 | **Sonnet subagent (architecture)** | read-only | Reviews architecture, conventions, integration wiring | `agents/reviewer.md` (architecture pass) |
+| 4 | **Copilot** (optional) | read-only | Different model family perspective | Load `/copilot` for syntax |
 
-**Do NOT add reviewers beyond what is listed.** 5 is the panel size.
+**Do NOT add reviewers beyond what is listed.** 3-4 is the panel size.
 
 #### Reviewer Invocations
 
@@ -370,68 +303,59 @@ cat > /tmp/wu-{ID}-review-prompt.md << 'REVIEW_EOF'
 ... filled reviewer.md template ...
 REVIEW_EOF
 ```
-For Codex specifically, feed the prompt file via stdin. Do not inline it as
-`$(cat /tmp/...md)`.
+For Codex specifically, pass the filled prompt text in the MCP `prompt` field.
 
-**1. Codex (review+fix)** — the only reviewer that writes files.
+**1. Codex MCP (review+fix)** — the only reviewer that writes files.
 Uses the specialized prompt from `agents/codex-reviewer.md` which includes
 fix-application instructions.
-```bash
-bash skills/codex/scripts/codex-exec.sh generate \
-  --cd <worktree-or-branch-path> \
-  --output /tmp/wu-{ID}-review-codex.md \
-  --stdin /tmp/wu-{ID}-codex-review-prompt.md
+```json
+{
+  "mode": "generate",
+  "cwd": "<worktree-or-branch-path>",
+  "prompt": "[contents of /tmp/wu-{ID}-codex-review-prompt.md]",
+  "timeout_sec": 300
+}
 ```
 
-**2. Sonnet subagent** — Agentic Rubrics (unchanged from original):
-```
-Agent tool with prompt from agents/reviewer.md, model: sonnet
-```
+**2. Sonnet subagent (rubric)** — Agentic Rubrics pass.
+Spawn via the Agent tool with `subagent_type: "review-lens"` (or
+`general-purpose` if review-lens is unavailable). Prompt is the contents of
+`agents/reviewer.md` with the **rubric** focus emphasized.
 
-**3. Cursor (read-only)** — freed from generation, now reviews.
-Load `/cursor` for invocation syntax. Key params: `--mode ask`,
-`--workspace <worktree-or-branch-path>`, 120s timeout.
-Prompt: `$(cat /tmp/wu-{ID}-review-prompt.md)`. Output to
-`/tmp/wu-{ID}-review-cursor.md`.
+**3. Sonnet subagent (architecture)** — Architecture & integration pass.
+Spawn a second Agent subagent with the same `agents/reviewer.md` prompt
+but with focus directed at architecture, conventions, integration wiring,
+and over-engineering signals. Use `isolation: "worktree"` if the first
+subagent is still running.
 
-**4. Copilot (read-only)** — load `/copilot` for invocation syntax.
+**4. Copilot (optional)** — load `/copilot` for invocation syntax.
 Key params: `--add-dir <worktree-or-branch-path>`, 120s timeout.
 Prompt: `$(cat /tmp/wu-{ID}-review-prompt.md)`. Output to
-`/tmp/wu-{ID}-review-copilot.md`.
+`/tmp/wu-{ID}-review-copilot.md`. If Copilot is unavailable or times out,
+proceed with the 3-reviewer panel.
 
-**5. Gemini (best practices)**:
-```bash
-bash skills/gemini/scripts/gemini-exec.sh review \
-  --stdin /tmp/wu-{ID}-review-prompt.md \
-  --output /tmp/wu-{ID}-review-gemini.md
-```
-Gemini fallback: if unavailable or times out, retry with Copilot (using a
-different `--model`). If both fail, proceed with 4 reviewers.
-
-Launch all 5 with `run_in_background: true`. Do NOT poll.
+Launch all 3-4 with `run_in_background: true` (or async MCP). Do NOT poll.
 
 #### Verdict Synthesis
 
-After all 5 reviewers return, the main thread synthesizes (NEVER rely on
+After all reviewers return, the main thread synthesizes (NEVER rely on
 subagents to write to the DB — extract response text and write via
 `db_upsert` in the main thread):
 
 ```bash
 source artifacts/db.sh
 db_write 'meta-execute' 'review' '{WU-ID}-codex' "$CODEX_REVIEW"
-db_write 'meta-execute' 'review' '{WU-ID}-sonnet' "$SONNET_REVIEW"
-db_write 'meta-execute' 'review' '{WU-ID}-cursor' "$CURSOR_REVIEW"
-db_write 'meta-execute' 'review' '{WU-ID}-copilot' "$COPILOT_REVIEW"
-db_write 'meta-execute' 'review' '{WU-ID}-gemini' "$GEMINI_REVIEW"
+db_write 'meta-execute' 'review' '{WU-ID}-sonnet-rubric' "$SONNET_RUBRIC_REVIEW"
+db_write 'meta-execute' 'review' '{WU-ID}-sonnet-architecture' "$SONNET_ARCH_REVIEW"
+db_write 'meta-execute' 'review' '{WU-ID}-copilot' "$COPILOT_REVIEW"   # if present
 ```
 
 **Synthesis rules:**
-- **3+ of 5 ACCEPT** (or MINOR_FIX that Codex already fixed) → **ACCEPT**
-- **Any reviewer flags REJECT** → Codex applies fixes informed by ALL 5
+- **All present reviewers ACCEPT** (or MINOR_FIX that Codex already fixed) → **ACCEPT**
+- **One reviewer flags REJECT** → Codex applies fixes informed by all
   reviewer perspectives, then one more Sonnet pass to verify the fix
-- **Disagreement (2 ACCEPT, 2 REJECT, 1 MINOR_FIX)** → Claude reads the
-  5 summaries (NOT the code) and makes the call. Escalate to user if
-  uncertain.
+- **Disagreement (mixed verdicts)** → Claude reads the reviewer summaries
+  (NOT the code) and makes the call. Escalate to user if uncertain.
 - **Unanimous REJECT** → classify failure type and retry (see below)
 
 Store the synthesized verdict:
@@ -440,9 +364,9 @@ db_upsert 'meta-execute' 'verdict' '{WU-ID}' "$SYNTHESIZED_VERDICT"
 ```
 
 **Confidence scoring** (for the completion summary):
-- 5/5 agree: HIGH confidence
-- 4/5 agree: HIGH confidence
-- 3/5 agree: MEDIUM confidence
+- 4/4 agree: HIGH confidence
+- 3/4 or 3/3 agree: HIGH confidence
+- 2/3 agree: MEDIUM confidence
 - Disagreement requiring Claude synthesis: LOW confidence (flag for user)
 
 #### Processing Verdicts
@@ -460,17 +384,17 @@ Based on the synthesized verdict:
 
 **Transient errors** (syntax, import, type errors — the code approach is
 sound but has mechanical bugs):
-- Retry with error output appended to context. Max 3 retries.
+- Retry by re-dispatching Codex MCP with the error output appended to context. Max 3 retries.
 - Codex can often fix these directly during its review+fix pass.
 
 **Permanent errors** (logic gaps, architectural misunderstanding, wrong
 approach — the fundamental strategy is flawed):
 - Do NOT retry the same approach. This wastes tokens without progress.
-- Generate a **fresh attempt with a different approach** (new prompt angle).
-  Swap generator models (e.g., different `--model` for Cursor, different
-  `--agent` config for Vibe). See `/cursor` and `/vibe` for syntax.
-- If 2nd fresh attempt also fails: escalate to Opus review for feedback,
-  then one more attempt with Opus feedback included.
+- Generate a **fresh attempt with a different approach** — re-dispatch
+  Codex MCP with a reformulated prompt that explicitly rules out the
+  failed strategy. Optionally raise `reasoning: "high"`.
+- If the 2nd fresh attempt also fails: escalate to Opus review for feedback,
+  then one more Codex MCP attempt with that feedback included in the prompt.
 - 3rd failure on permanent errors: flag for human review. Move to `blocked`.
 
 How to classify: If the rejection mentions wrong logic, missing understanding,
@@ -479,14 +403,10 @@ syntax, missing import, wrong type, formatting → transient.
 
 #### Pipeline Optimization
 
-Reviews run in parallel with ongoing generation. When WU-1's generation
-finishes while WU-2 is still generating:
-1. WU-1's Cursor slot frees → available for WU-1's Cursor review
-2. WU-1's Vibe slot frees → available for next WU's generation
-3. Dispatch WU-1's 5-reviewer panel immediately — do not wait for WU-2
-
-This staggered pipeline keeps all CLI slots productive and respects
-concurrency limits (Cursor never exceeds 3: max 2 generating + 1 reviewing).
+Generation and review run in parallel across the wave. While WU-1 is in
+review, WU-2 generation can be in-flight in another Codex slot. Maintain
+the 5-concurrent ceiling across all Codex MCP jobs (generation + review
+combined). Typical saturation: 2 WUs generating + 2 WUs reviewing.
 
 ### Phase 5: Merge Strategy [Inline]
 
@@ -502,7 +422,7 @@ order (not all-at-once):
 4. After successful merge, **clean up the worktree**:
    ```bash
    git worktree remove <worktree-path> 2>/dev/null || true
-   git branch -d wu-{ID}-alpha wu-{ID}-beta 2>/dev/null || true
+   git branch -d wu-{ID} 2>/dev/null || true
    ```
 
 This approach keeps <3 merge conflicts over extended work sessions when
@@ -558,15 +478,15 @@ push or review is needed at this stage unless the user requests one.
 ### Timeout Guards
 
 - Set a mental time limit of 5 minutes per phase. If a phase has not produced output in 5 minutes, check if the subprocess is still running.
-- For Gemini CLI calls: always use `$GTIMEOUT` with skill-appropriate values (120s for read-only analysis, 180s for larger prompts). If it times out, skip and note "Gemini timed out — skipping."
-- For Codex CLI calls: always use `$GTIMEOUT` with skill-appropriate values (120s for read-only review, 180s for generation or large prompts). Same fallback.
+- For Codex MCP calls: set `timeout_sec` explicitly when the default is not enough, and skip with a clear note if the broker reports `timed_out` or unavailable.
+- For Copilot CLI calls: always use `$GTIMEOUT` with skill-appropriate values (120s read-only review). If it times out, skip and note "Copilot timed out — skipping."
 - If a subagent has been running for more than 10 minutes with no output, consider it stalled and move on.
 - Report any timeouts in the completion summary so the user knows what was skipped.
 
 ### Budget Cap
 
-Each work unit gets a maximum of **6 worker invocations** (2 for Best-of-N
-initial generation + up to 4 retries across transient/permanent paths). If a
+Each work unit gets a maximum of **5 worker invocations** (1 initial Codex
+generation + up to 4 retries across transient/permanent paths). If a
 unit exhausts its budget, it moves to `blocked` for human review regardless
 of failure type. This prevents cost spirals on intractable problems.
 
@@ -574,21 +494,19 @@ of failure type. This prevents cost spirals on intractable problems.
 
 - **Claude is the orchestrator, not the implementer.** Claude reads plans,
   assigns work, synthesizes verdicts, manages the queue. Claude does NOT
-  write application code directly unless applying a Vibe candidate's output.
-- **Workers are disposable.** Each Vibe/Cursor/Codex/Sonnet invocation is
-  stateless and ephemeral. All context must be passed in the prompt — do
+  write application code directly except for trivial merge-conflict fixes.
+- **Workers are disposable.** Each Codex MCP / Sonnet subagent invocation
+  is stateless and ephemeral. All context must be passed in the prompt — do
   not assume workers remember previous invocations.
-- **Concurrency ceilings.** Vibe: 2 (conservative start, hard max 3).
-  Cursor: 2 generating + 1 reviewing = 3 max. Codex: 2 reviewing (of 5
-  max). Copilot: 2. Gemini: 2. With Best-of-2, this means 2 WUs generating
-  and 2 WUs reviewing at a time.
-- **5-reviewer panel is mandatory.** No work unit is marked `done` without
-  all 5 reviewers scoring it. Codex reviews+fixes; Sonnet, Cursor, Copilot,
-  Gemini provide read-only perspectives. 3/5 agreement required for ACCEPT.
-  Unreviewed code is untrusted code.
-- **Codex is editor, not coder.** Codex's role is review+fix, not
-  generation. Vibe and Cursor handle generation. This is a higher-value
-  use of Codex's capabilities.
+- **Concurrency ceilings.** Codex MCP: 5 concurrent total (across generation
+  and review). Copilot: 2. Sonnet subagents: no hard limit.
+- **3-4 reviewer panel is mandatory.** No work unit is marked `done` without
+  the panel scoring it. Codex MCP reviews+fixes; Sonnet subagents and
+  Copilot provide read-only perspectives. Majority agreement required for
+  ACCEPT. Unreviewed code is untrusted code.
+- **Codex MCP is editor and coder.** Codex MCP handles both generation and
+  review+fix in this design. Per-WU diversity comes from the multi-reviewer
+  panel, not from multiple generators.
 - **No context stuffing.** Workers receive curated 10-50k token packages.
   Never pass the full codebase, full docs, or other workers' specifications.
 - **Outcome > process.** Specify WHAT to build precisely. Leave HOW to the
@@ -599,8 +517,8 @@ of failure type. This prevents cost spirals on intractable problems.
 ```
 User: "Plan is approved. Let's build it."
 Action: Read project-plan.md. Decompose into work units. Present the table.
-        On confirmation, assemble context packages, spin up Best-of-N workers,
-        and start the execution loop.
+        On confirmation, assemble context packages, dispatch Codex MCP
+        generators, and start the execution loop.
 ```
 
 ```
@@ -612,8 +530,9 @@ Action: Same as above. Check that project-plan.md exists and is approved.
 ```
 User: "Start building. Codex isn't working today."
 Action: Check Codex availability — confirm unavailable. Fall back to Sonnet
-        subagents with worktree isolation. Inform the user. Proceed with the
-        same execution pattern using subagents instead.
+        subagents with worktree isolation for generation, and use two Sonnet
+        subagents in the review panel (one rubric, one critique).
+        Inform the user. Proceed with the same execution pattern.
 ```
 
 ```
@@ -624,4 +543,4 @@ Action: Read project-plan.md. Identify which units are already marked done.
 
 ---
 
-Before completing, read and follow `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/cross-cutting-rules.md`.

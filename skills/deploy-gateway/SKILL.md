@@ -9,7 +9,7 @@ argument-hint: [--manual-build to build locally instead of using CI image, --for
 
 You are performing a **redeploy** of the Homelab MCP Gateway container on Tower (Unraid). The image is built by GitLab CI on every push to main.
 
-**Reference**: Read `../../references/gateway-dev.md` for full gateway development rules if needed.
+**Reference**: Read `references/gateway-dev.md` for full gateway development rules if needed.
 
 **IMPORTANT**: All code changes must be committed to GitLab BEFORE deploying. If there are uncommitted changes, commit first.
 

@@ -1,6 +1,7 @@
 ---
 name: doc-audit
 description: Audits documentation quality, completeness, and accuracy. Catches stale READMEs, undocumented APIs, missing setup guides, and doc-code drift. Use before releases or quarterly.
+disable-model-invocation: true
 ---
 
 # Doc Audit
@@ -170,4 +171,4 @@ User: We haven't touched our docs in 6 months. How bad is it?
 
 ---
 
-Before completing, read and follow `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/cross-cutting-rules.md`.

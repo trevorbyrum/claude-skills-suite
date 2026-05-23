@@ -16,10 +16,10 @@ Replace `{LENS}` with the lens name (e.g., `security-review`, `perf-review`).
 - **Multi-model mode** (called by meta-review): Store per-model findings:
   - Sonnet: `db_upsert '{LENS}' 'findings' 'sonnet' "$CONTENT"`
   - Codex: `db_upsert '{LENS}' 'findings' 'codex' "$CONTENT"`
-  - Gemini: `db_upsert '{LENS}' 'findings' 'gemini' "$CONTENT"`
 
-Not all lenses use all 3 models. The meta-review skill determines which
+Not all lenses use both models. The meta-review skill determines which
 models run for each lens. The skill only writes to slots it was assigned.
+Architecture/strategy lenses (counter-review, drift-review) are Sonnet-only.
 
 ## Fresh Findings Check
 
@@ -43,9 +43,10 @@ For multi-model mode, check the relevant model label instead of `standalone`.
   with this skill's lens instructions and input files. Store findings as
   `db_upsert '{LENS}' 'findings' 'standalone'`.
 - **Via meta-review**: The `review-lens` agent runs the Sonnet review, while
-  Codex (`/codex`) and/or Gemini (`/gemini`) run in parallel with the same
-  prompt. Each model stores findings under its own label (`sonnet`, `codex`,
-  `gemini`). The meta-review skill handles synthesis.
+  Codex (`mcp__codex-mcp__codex_run` or async `codex_start`) runs in parallel
+  with the same prompt for code-centric lenses. Each model stores findings
+  under its own label (`sonnet`, `codex`). The meta-review skill handles
+  synthesis.
 
 ## Finding Format
 

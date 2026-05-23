@@ -1,6 +1,7 @@
 ---
 name: build-plan
 description: Generates project-plan.md with phases, milestones, technical approach, and parallelizable work units. Use when moving from research/context into implementation planning.
+disable-model-invocation: true
 ---
 
 # build-plan
@@ -32,26 +33,29 @@ execution.
    and flags risks. If research was not run, note it and proceed from context
    alone. The plan will be less evidence-backed but still functional.
 
-2. **Competitive landscape check.** Load `/gemini` for invocation syntax.
-   Key params: 120s timeout, prompt: `"For a project described as: [one-line
-   summary from context]. List the top 5 competing or similar projects/products.
-   For each: name, what it does, strengths, weaknesses, and what this project
-   could learn from it. Bullet points only."`. Output to
-   `/tmp/competitive-landscape.md`.
+2. **Competitive landscape check.** Spawn a Sonnet subagent
+   (`subagent_type: "general-purpose"`) with WebSearch access. Prompt:
+   `"You have WebSearch. For a project described as: [one-line summary from
+   context]. List the top 5 competing or similar projects/products. For each:
+   name, what it does, strengths, weaknesses, and what this project could
+   learn from it. Cite URLs. Bullet points only."`. After the subagent
+   returns, write the output to `/tmp/competitive-landscape.md`.
    Read the output and incorporate relevant insights into the plan (especially
-   "lessons learned" and "differentiation"). If Gemini is unavailable or fails,
-   retry with Copilot — load `/copilot` for invocation syntax. Same prompt,
-   same output file. If both fail, skip and note it.
+   "lessons learned" and "differentiation"). If the Sonnet subagent can't
+   access WebSearch, retry with Copilot — load `/copilot` for invocation
+   syntax. Same prompt, same output file. If both fail, skip and note it.
 
-3. **Technical feasibility check.**
-   ```bash
-   bash skills/codex/scripts/codex-exec.sh review \
-     --cd /tmp \
-     --output /tmp/feasibility-check.txt \
-     "Given this tech stack: [stack from context]. And this scope: [scope summary]. Flag any technical risks: library maturity issues, known scaling problems, integration pain points, or missing pieces. Be specific."
+3. **Technical feasibility check.** Call `mcp__codex-mcp__codex_run`:
+   ```json
+   {
+     "mode": "review",
+     "cwd": "/tmp",
+     "prompt": "Given this tech stack: [stack from context]. And this scope: [scope summary]. Flag any technical risks: library maturity issues, known scaling problems, integration pain points, or missing pieces. Be specific.",
+     "timeout_sec": 300
+   }
    ```
-   Read the output and factor risks into the plan. If the command fails
-   (exit 1 = Codex unavailable), skip and note it.
+   Read the final message and factor risks into the plan. If the MCP call
+   fails or `codex_health` is unhealthy, skip and note it.
 
 4. **Define phases.** Break the project into 3-6 phases. Each phase should
    deliver something usable or testable — avoid phases that are purely
@@ -194,22 +198,26 @@ After the user approves the plan, offer to generate skeleton files:
 > "Plan approved. Want me to generate skeleton files (interfaces, types, module stubs) for the work units? This gives implementation a head start."
 
 If yes:
-1. For each work unit that creates new files, dispatch a Codex worker:
-   ```bash
-   bash skills/codex/scripts/codex-exec.sh generate \
-     --cd <project-root> \
-     "Generate skeleton files for this work unit. Create the file structure with interfaces, type definitions, function signatures (with TODO bodies), and module exports. Do NOT implement business logic — just the structure. Work unit: [DESCRIPTION] Tech stack: [FROM PROJECT CONTEXT] Files to create: [FROM PLAN]"
+1. For each work unit that creates new files, dispatch a Codex worker with
+   `mcp__codex-mcp__codex_run`:
+   ```json
+   {
+     "mode": "generate",
+     "cwd": "<project-root>",
+     "prompt": "Generate skeleton files for this work unit. Create the file structure with interfaces, type definitions, function signatures (with TODO bodies), and module exports. Do NOT implement business logic — just the structure. Work unit: [DESCRIPTION] Tech stack: [FROM PROJECT CONTEXT] Files to create: [FROM PLAN]",
+     "timeout_sec": 300
+   }
    ```
-2. If the command fails (exit 1 = Codex unavailable), skip — this is a convenience step, not required.
+2. If the MCP call fails, skip — this is a convenience step, not required.
 
 ## Examples
 
 ```
 User: "Plan the build"
 Action: Read project-context.md and research_synthesis.md. Run competitive
-        landscape (Gemini) and feasibility check (Codex) in parallel.
-        Define phases, milestones, work units. Write project-plan.md.
-        Present summary for approval.
+        landscape (Sonnet WebSearch subagent) and feasibility check (Codex
+        MCP) in parallel. Define phases, milestones, work units. Write
+        project-plan.md. Present summary for approval.
 ```
 
 ```
@@ -235,4 +243,4 @@ Action: Read existing project-plan.md and project-context.md. Ask what
 
 ## Cross-cutting
 
-Before completing, read and follow `../references/cross-cutting-rules.md`.
+Before completing, read and follow `references/cross-cutting-rules.md`.

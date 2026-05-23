@@ -1,0 +1,24 @@
+name: research-kb
+
+services:
+  db:
+    image: timescale/timescaledb-ha:pg17
+    ports:
+      - "5433:5432"
+    volumes:
+      - db_data:/home/postgres/pgdata/data
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: research_kb
+
+  vectorizer-worker:
+    image: timescale/pgai-vectorizer-worker:latest
+    depends_on:
+      - db
+    environment:
+      PGAI_VECTORIZER_WORKER_DB_URL: postgres://postgres:postgres@db:5432/research_kb
+      OLLAMA_HOST: http://host.docker.internal:11434
+      PGAI_VECTORIZER_WORKER_POLL_INTERVAL: 5s
+
+volumes:
+  db_data:
