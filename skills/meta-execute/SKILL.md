@@ -123,7 +123,8 @@ Wave assignments are visible and correct.
 ### Phase 2: Worker Pool Setup [Inline]
 
 Check availability of external agents:
-- **Codex MCP**: call `mcp__codex-mcp__codex_health` with `cwd: <project-root>` (healthy = available). REQUIRED.
+- **Codex MCP**: call `mcp__codex-mcp__codex_health` with `cwd: <project-root>` and `skip_smoke: true`. REQUIRED.
+- If the fast health check passes but a full smoke times out, do not declare Codex unavailable. Launch the first real `codex_start` generation job with the normal task timeout and decide from that result.
 - **Copilot** (optional 4th reviewer): load `/copilot` for path resolution.
 - **Sonnet subagents**: always available (managed by Claude runtime).
 
@@ -478,7 +479,7 @@ push or review is needed at this stage unless the user requests one.
 ### Timeout Guards
 
 - Set a mental time limit of 5 minutes per phase. If a phase has not produced output in 5 minutes, check if the subprocess is still running.
-- For Codex MCP calls: set `timeout_sec` explicitly when the default is not enough, and skip with a clear note if the broker reports `timed_out` or unavailable.
+- For Codex MCP calls: set `timeout_sec` explicitly when the default is not enough. A health smoke timeout is only degraded signal; skip Codex only after the real task reports `timed_out`/failed or the broker reports a hard config error.
 - For Copilot CLI calls: always use `$GTIMEOUT` with skill-appropriate values (120s read-only review). If it times out, skip and note "Copilot timed out — skipping."
 - If a subagent has been running for more than 10 minutes with no output, consider it stalled and move on.
 - Report any timeouts in the completion summary so the user knows what was skipped.

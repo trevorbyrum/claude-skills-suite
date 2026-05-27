@@ -63,7 +63,9 @@ if echo "$STAGED_FILES" | grep -qE '\.(js|jsx|ts|tsx|json)$'; then
   fi
   if command -v oxlint >/dev/null 2>&1; then
     OXLINT_OUT=$(echo "$JSTS_FILES" | xargs oxlint 2>/dev/null || true)
-    if echo "$OXLINT_OUT" | grep -qE '(error|warning)'; then
+    # Strip the "Found N warnings and N errors" summary line, then check for real findings.
+    OXLINT_FINDINGS=$(echo "$OXLINT_OUT" | grep -vE '^Found [0-9]+ warnings? and [0-9]+ errors?' || true)
+    if echo "$OXLINT_FINDINGS" | grep -qE '\b(error|warning)\b'; then
       ISSUES="${ISSUES}--- oxlint (JS/TS) ---\n${OXLINT_OUT}\n\n"
     fi
   fi

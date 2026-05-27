@@ -111,7 +111,7 @@ After comparing docs to code, run a reverse check — find things in code that d
    ```
 2. Read the final message and add any undocumented findings to the drift report
    as "Code-ahead" items.
-3. If Codex is unavailable or times out, skip — the standard doc-to-code comparison still runs.
+3. If the real Codex task is unavailable or times out, skip — the standard doc-to-code comparison still runs. Do not skip solely because a `codex_health` smoke timed out.
 
 ### 4. Status Accuracy Check
 

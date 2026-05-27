@@ -69,7 +69,8 @@ ui-review is conditional — only included if frontend files (`*.tsx`, `*.jsx`, 
 2. Create the `artifacts/reviews/` directory if it does not exist.
 
 3. Check external-agent availability for multi-model execution:
-   - **Codex**: call `mcp__codex-mcp__codex_health` with `cwd: <project-root>` (healthy = available)
+   - **Codex**: call `mcp__codex-mcp__codex_health` with `cwd: <project-root>` and `skip_smoke: true` first. This confirms broker/binary/path wiring quickly.
+   - If a full Codex smoke is needed, call `codex_health` with `smoke_timeout_sec: 120`. Do not mark Codex unavailable from a single health smoke timeout; try the first real `codex_start` review with its normal `timeout_sec` before falling back.
    - **Sonnet subagents**: always available (managed by Claude runtime)
    If Codex MCP is unavailable, lenses fall back to Sonnet-only — synthesis
    adjusts confidence scoring accordingly.
@@ -276,7 +277,10 @@ Each Codex MCP job:
    source artifacts/db.sh && db_upsert '{lens}' 'findings' 'codex' "$CODEX_FINAL_MESSAGE"
    ```
 
-If Codex is unavailable, skip all Codex reviews and note it in synthesis.
+If Codex has a hard broker/config failure, skip all Codex reviews and note it
+in synthesis. If only the health smoke timed out, do not skip the panel; launch
+the first queued Codex review with `timeout_sec: 300` and decide from that real
+task result.
 
 **Steps 2a and 2b launch simultaneously** — Sonnet (no limit) goes
 immediately. Codex Wave 1 (5 slots) goes immediately. Codex Wave 2 backfills

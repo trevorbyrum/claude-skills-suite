@@ -132,10 +132,14 @@ which fixes to implement. The user may also:
 Check Codex availability with `mcp__codex-mcp__codex_health`:
 ```json
 {
-  "cwd": "<project-root>"
+  "cwd": "<project-root>",
+  "skip_smoke": true
 }
 ```
-Healthy = available; unhealthy or failed MCP call = unavailable. Note the result.
+Healthy = broker/binary/path preflight passed. If only a health smoke times
+out, retry once with `smoke_timeout_sec: 120` or run the first real Codex task
+with its normal timeout before falling back. Treat hard config errors as
+unavailable. Note the result.
 
 **Pool limits** (from `general.md`):
 - Codex: **5 concurrent** MCP jobs

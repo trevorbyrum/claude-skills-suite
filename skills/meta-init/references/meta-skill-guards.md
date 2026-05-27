@@ -11,7 +11,9 @@
 - For Codex calls: use `codex-mcp` MCP tools. Use `codex_health` for
   availability, `codex_run` for normal jobs, and `codex_start` plus
   `codex_status`/`codex_result` for long or parallel jobs. Set `timeout_sec`
-  explicitly for work that may exceed the default.
+  explicitly for work that may exceed the default. Prefer `skip_smoke: true`
+  for fast availability checks; do not treat one health smoke timeout as a
+  complete outage unless a real Codex task also fails/times out.
 - For Copilot CLI calls: always use `$GTIMEOUT` with skill-appropriate values
   (120s for read-only analysis, 180s for larger prompts). If it times out,
   skip and note "Copilot timed out — skipping."
