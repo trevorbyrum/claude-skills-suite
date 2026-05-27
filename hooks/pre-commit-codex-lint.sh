@@ -38,6 +38,20 @@ HOOKEOF
   fi
 fi
 
+# --- Phase 1.5: Schema-drift sanity check ---
+# When files under schema/ change, ensure code under src/ (or equivalent)
+# also changed in the same commit. Schema and consuming code must move
+# together — a schema-only commit (or code-only commit when schema is the
+# source of truth) is a leading indicator of drift. This is a WARNING only;
+# the deep check lives in /breaking-change-review §5.5.
+SCHEMA_CHANGED=$(cd "$REPO_DIR" && git diff --cached --name-only --diff-filter=ACMR 2>/dev/null | grep -E '^schema/' || true)
+NON_SCHEMA_CHANGED=$(cd "$REPO_DIR" && git diff --cached --name-only --diff-filter=ACMR 2>/dev/null | grep -vE '^(schema/|\.codex/|\.github/|artifacts/|docs/|.*\.md$|.*\.txt$)' | grep -v '^$' || true)
+if [ -n "$SCHEMA_CHANGED" ] && [ -z "$NON_SCHEMA_CHANGED" ]; then
+  printf 'Warning: schema/ files changed without corresponding code updates.\n' >&2
+  printf 'Run /breaking-change-review (schema-drift mode) before pushing to catch downstream drift.\n' >&2
+  printf 'Staged schema files:\n%s\n' "$SCHEMA_CHANGED" >&2
+fi
+
 # --- Phase 2: Deterministic linters (per-language, staged files only) ---
 STAGED_FILES=$(cd "$REPO_DIR" && git diff --cached --name-only --diff-filter=ACM 2>/dev/null || true)
 

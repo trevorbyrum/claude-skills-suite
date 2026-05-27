@@ -455,7 +455,8 @@ When all waves are done (the last wave's gate was approved):
    ```
 
 4. **Logging pass (optional)**: If the meta-review from any wave flagged
-   log-review findings, suggest running `/log-gen` as a post-implementation
+   log-review findings, suggest running `/log-review` (then accepting its
+   Generation Phase) as a post-implementation
    pass to add logging instrumentation to the newly generated code. LLM-
    generated code almost never includes adequate logging — this catches it
    before the first production incident.

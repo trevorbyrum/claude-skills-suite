@@ -43,6 +43,9 @@ NEVER:
 See `project-context.md` for architecture decisions and constraints.
 See `project-plan.md` for implementation roadmap.
 See `features.md` for product capabilities.
+See `schema/` for the authoritative data model (tables, migrations,
+ERD). Code that references DB columns/tables must stay in sync with
+`schema/tables.sql` — `/breaking-change-review` flags drift.
 
 ## Commit Convention
 

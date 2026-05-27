@@ -1,6 +1,6 @@
 ---
 name: test-review
-description: Evaluates test coverage, quality, and gaps. Catches LLM tendencies to skip or stub tests. Reviews strategy against features.md to ensure critical paths are covered.
+description: Evaluates test coverage, quality, and gaps; can then generate tests that pass its own scrutiny. Catches LLM tendencies to skip or stub tests.
 disable-model-invocation: true
 ---
 
@@ -222,6 +222,73 @@ End with:
 - Metrics summary: mutation score, branch coverage, CRAP hotspots (if data available)
 - Test strategy assessment: does the shape match the architecture?
 - Overall verdict: does this test suite catch regressions, or is it decoration?
+
+## Generation Phase (optional, opt-in)
+
+After the review writes findings, **offer to generate the missing tests**.
+This is the absorbed test-gen capability — review and fix in one skill.
+
+Trigger condition: at least one CRITICAL or HIGH finding tagged as a
+coverage gap, stub test, or missing error path.
+
+> "Found N coverage gaps. Want me to generate tests for them now? (yes /
+> pick a subset / no)"
+
+If the user accepts:
+
+### G1. Plan Generation
+
+For each gap selected by the user, read the source file and identify:
+- The behaviors to test (public API, not implementation details)
+- Edge cases: empty input, null, boundary values, error conditions
+- Fixture needs
+- Whether a related test exists that should be extended rather than duplicated
+
+Present a table:
+
+| Target | Source | Test File | Approach | Tests to Generate |
+|---|---|---|---|---|
+| Auth login | `src/auth/login.ts` | `src/auth/__tests__/login.test.ts` | Unit, mock provider | 8 |
+
+Wait for user approval on the plan.
+
+### G2. Generate
+
+For each approved target, spawn a Sonnet subagent (`subagent_type: "general-purpose"`)
+with the prompt template from `agents/test-worker.md`. Fill in all placeholders
+before spawning: `[SOURCE_CODE]`, `[SOURCE_PATH]`, `[EXISTING_TESTS]`,
+`[FRAMEWORK]`, `[FINDING]`, `[EDGE_CASES]`, `[TEST_PATH]`.
+
+**Quality guardrails** (enforced by the worker prompt):
+- Assert behavior, not implementation
+- Meaningful assertions (no `toBeDefined` / `toBeTruthy` on objects)
+- At least one error/edge case per function
+- Match project conventions exactly
+- No anti-patterns from `references/llm-test-antipatterns.md`
+
+The main thread writes generated code to disk after each subagent returns
+(subagents don't write files in this flow — the main thread controls placement).
+
+### G3. Run
+
+After writing each test file, run the project's test command scoped to
+the new file. If the test fails, fix once and retry. After 2 failed
+retries, flag for manual review — do not keep iterating.
+
+### G4. Persist + Report
+
+Store the generation result in the artifact DB:
+```bash
+source artifacts/db.sh
+db_upsert 'test-review' 'generation' "$TARGET_PATH" "files: <list>, tests: <count>, passing: <count>, failing: <count>"
+```
+
+Report:
+- Files generated (with paths and line counts)
+- Tests per file: total, passing, failing
+- Coverage delta (if a coverage tool is available)
+- Findings addressed vs. skipped (with reason)
+- Suggestion: "Re-run `/test-review` to confirm the new tests pass scrutiny."
 
 ## Execution Mode
 

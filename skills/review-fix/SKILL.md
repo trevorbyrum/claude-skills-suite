@@ -84,10 +84,11 @@ db_read_all '{lens}' 'findings'
    - **Finding**: what's wrong
    - **Fix**: what needs to change
 
-4. **Logging findings**: If findings from `log-review` are present, delegate
-   those to `/log-gen` instead of implementing them as generic fix units.
-   Log-gen understands logging patterns, logger setup, and structured logging
-   conventions. Pass the log-review findings directly to log-gen.
+4. **Logging findings**: If findings from `log-review` are present, hand
+   those back to `/log-review` and trigger its Generation Phase instead of
+   implementing them as generic fix units. The Generation Phase understands
+   logging patterns, logger setup, and structured-logging conventions for
+   the project's stack — generic fix units do not.
 
 5. Group remaining findings that touch the **same files** into a single fix unit.
    Rationale: a worker already has those files in context, so batching

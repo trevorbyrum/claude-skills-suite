@@ -27,10 +27,18 @@ list of templates and their output destinations:
 | `todo-template.md` | `todo.md` |
 | `features-template.md` | `features.md` |
 | `claude-md-template.md` | `CLAUDE.md` |
-| `agents-md-template.md` | `AGENTS.md` |
+| `agents-md-template.md` | `AGENTS.md` (regenerated from project-context.md if present) |
 | `codex-instructions-template.md` | `.codex/instructions.md` |
 | `copilot-instructions-template.md` | `.github/copilot-instructions.md` |
 | `gitignore-template` | `.gitignore` |
+| `schema-readme-template.md` | `schema/README.md` |
+| `schema-tables-template.sql` | `schema/tables.sql` |
+| `schema-migration-template.sql` | `schema/migrations/000_template.sql` |
+
+**AGENTS.md regeneration rule**: in sync mode, if `project-context.md`
+exists AND is newer than `AGENTS.md`, regenerate `AGENTS.md` from the
+context per `project-scaffold`'s Step 3a auto-generation logic — don't
+just diff the template structure.
 
 Also check for:
 - `project-context.md` (from `project-context/templates/context-template.md`)
