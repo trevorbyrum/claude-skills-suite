@@ -108,6 +108,72 @@ Check for config changes that break existing deployments:
 - Changed port numbers or bind addresses
 - Changed feature flag names or defaults
 
+### 5.5 Schema Drift Detection (CRITICAL, when `schema/` exists)
+
+If the project has a `schema/` directory (set up by `project-scaffold`),
+run a focused drift check between the canonical schema and the code that
+references it. This catches the common failure mode where someone updates
+ORM models / type definitions / queries without updating the source of
+truth (or vice versa).
+
+This section runs in two cases:
+- The diff being reviewed touches anything under `schema/` (auto-trigger)
+- The user explicitly asks for a "schema drift" check
+
+Inputs for this section:
+- `schema/tables.sql` — authoritative table definitions
+- `schema/migrations/` — applied migrations (read order: filename-numeric ascending)
+- ORM models / type definitions / query call sites in `src/` (or equivalent)
+
+Procedure:
+
+1. **Parse `schema/tables.sql`** to extract the canonical set of:
+   - Tables (name)
+   - Columns (table, name, type, nullability, default)
+   - Constraints (PK, FK, UNIQUE, CHECK)
+   - Indexes
+   Store the parsed set as the source-of-truth catalog for this run.
+
+2. **Locate code-side schema references.** Scan for the patterns that
+   describe a table or column from the application side:
+   - **TypeScript/JS**: `interface User`, `type User`, Prisma `model User`,
+     TypeORM `@Entity`, Drizzle `pgTable(...)`, knex `.table('users')`,
+     raw SQL strings (`SELECT … FROM users`)
+   - **Python**: SQLAlchemy `class User(Base)`, Django `class User(models.Model)`,
+     dataclass annotations on DB DTOs, raw SQL strings
+   - **Go**: GORM struct tags, sqlx struct tags, `db:"…"` tags, raw SQL
+   - **Rust**: Diesel `table!`, sqlx query macros
+   For each match, extract the implied table + columns the code uses.
+
+3. **Diff code-side references against canonical catalog**:
+   - **Code references column not in `tables.sql`** → CRITICAL drift. The
+     code will fail at runtime against the real DB. List file:line + the
+     bad column name.
+   - **Code references table not in `tables.sql`** → CRITICAL drift. Same.
+   - **Column nullability mismatch** (code declares NOT NULL but `tables.sql`
+     says NULL, or vice versa) → HIGH drift. Will cause silent bugs.
+   - **Column type mismatch** (code says `int`, `tables.sql` says `text`) → HIGH.
+   - **Canonical column or table referenced by zero code** → MEDIUM (potential
+     dead schema; may also be intentional for external consumers — flag, don't
+     auto-recommend deletion).
+   - **Migrations directory not monotonic** (gaps in numbering, duplicates) →
+     HIGH drift (history corruption).
+   - **Migration touches a table not in `tables.sql`** → CRITICAL drift
+     (someone applied a migration but forgot to update the source of truth).
+
+4. **Cross-reference with the current diff**. If the diff modifies
+   `schema/tables.sql` but no code in this commit references the new
+   shape (or vice versa), flag it. The two should change together.
+
+5. **Pre-commit gate integration**. The `pre-commit-codex-lint.sh` hook
+   invokes this mode automatically when files under `schema/` change. Any
+   CRITICAL drift blocks the commit; HIGH drift warns but doesn't block.
+
+Findings from this section use the same format as the rest of the skill,
+with `Category: Schema Drift` and a `Drift type` sub-field (Missing column /
+Missing table / Nullability mismatch / Type mismatch / Dead schema /
+Migration gap).
+
 ### 6. Cross-Reference with Docs
 
 If API documentation, READMEs, or migration guides exist:

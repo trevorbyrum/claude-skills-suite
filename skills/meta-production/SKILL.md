@@ -189,8 +189,10 @@ for dim in observability deployment operations reliability capacity; do
 done
 ```
 
-If Codex is unavailable, run these 5 checks as Sonnet subagents instead.
-Less depth but still covers the patterns via grep and file analysis.
+If Codex has a hard broker/config error or a real Codex task fails/times out,
+run these 5 checks as Sonnet subagents instead. Do not fall back solely because
+one `codex_health` smoke timed out. Less depth but still covers the patterns
+via grep and file analysis.
 
 #### Track C: Production Research Cross-Reference (Codex MCP)
 
@@ -332,9 +334,9 @@ codebase may have changed.
 - If the Phase 1 Sonnet subagent can't access WebSearch: try Codex MCP
   against existing project research artifacts, then Copilot. Note in
   methodology section.
-- If Codex is unavailable: run production antipattern checks and the
-  practices audit as Sonnet subagents instead. Note reduced scan depth in
-  methodology.
+- If Codex is unavailable after a real task failure/timeout or hard broker
+  error: run production antipattern checks and the practices audit as Sonnet
+  subagents instead. Note reduced scan depth in methodology.
 - If all external workers are unavailable: all scans run via Sonnet
   subagents. The report is still valid but note "single-model assessment"
   in methodology and reduce confidence in Dimensions 8-12 scoring.

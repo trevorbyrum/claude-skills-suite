@@ -79,8 +79,10 @@ artifact DB per connector (written by the research-connector agent).
 ### Track C: Codex Technical Validation (up to 4 workers)
 
 **Hard limit: 4 concurrent Codex MCP jobs.** Reserve 1 slot for Phase 2.5/3.
-Check availability with `mcp__codex-mcp__codex_health`; if unhealthy,
-reassign Codex work to Sonnet.
+Check availability with `mcp__codex-mcp__codex_health` using `skip_smoke: true`;
+if that reports a hard broker/config error, reassign Codex work to Sonnet. Do
+not reassign solely because a health smoke times out; launch one real Codex
+worker with the normal task timeout and decide from that result.
 
 **Workers 1-3: Primary research** — each gets 1-2 technical sub-questions.
 
@@ -679,7 +681,8 @@ Keep the report-back minimal — the dispatcher reads the full summary itself.
 
 ## Error Handling
 
-- **Codex unavailable**: Redistribute to Sonnet subagents. Debate becomes
+- **Codex unavailable**: Redistribute to Sonnet subagents only after a hard
+  broker/config error or a real Codex task failure/timeout. Debate becomes
   2-model (Opus + Sonnet). Note "Codex unavailable" in methodology.
 - **WebSearch unavailable**: Track D Sonnet subagents do inference-only
   synthesis from training data. Flag findings as "inference-only, no fresh

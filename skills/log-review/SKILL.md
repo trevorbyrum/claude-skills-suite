@@ -1,6 +1,6 @@
 ---
 name: log-review
-description: Audits logging and observability gaps — silent catches, missing context, no structured logging, absent trace IDs. Use before deploys or after implementation sprints.
+description: Audits logging gaps and can then generate the instrumentation to fix them — silent catches, missing context, no structured logs, absent trace IDs.
 disable-model-invocation: true
 ---
 
@@ -131,6 +131,100 @@ End with:
 - API boundary coverage assessment (what percentage of boundaries have logging?)
 - Correlation ID status (present / partial / absent)
 - Overall observability posture: **BLIND** (multiple CRITICALs), **PARTIAL** (HIGHs but basics covered), **OBSERVABLE** (minor gaps only)
+
+## Generation Phase (optional, opt-in)
+
+After the review writes findings, **offer to generate the logging
+instrumentation** to fix them. This is the absorbed log-gen capability —
+review and fix in one skill.
+
+Trigger condition: at least one CRITICAL or HIGH finding (silent failures,
+missing error context, uninstrumented API boundaries, missing correlation IDs).
+
+> "Found N observability gaps. Want me to add the logging now? (yes /
+> pick a subset / no)"
+
+If the user accepts:
+
+### G1. Detect or Create Logger
+
+Check if the project already has a logger configured:
+
+- **Node.js/TS**: `winston`, `pino`, `bunyan`, `morgan` in `package.json`
+- **Python**: `logging`, `structlog`, `loguru` imports
+- **Go**: `log/slog`, `zap`, `logrus`, `zerolog` imports
+- **Java**: `slf4j`, `log4j`, `logback` in dependencies
+- **Rust**: `tracing`, `log`, `env_logger` in `Cargo.toml`
+
+If none exists, create a minimal structured logger setup using the
+idiomatic library for the language. Prefer the project's existing patterns
+— don't introduce a new library if one is already in use.
+
+### G2. Group Findings + Approve
+
+Group selected findings by category and present them:
+
+1. **Silent failures** (CRITICAL) — fix first, these hide production errors
+2. **Error context** (HIGH) — add context to existing error handlers
+3. **API boundaries** (HIGH) — add request/response logging at system edges
+4. **Correlation IDs** (MEDIUM) — add request ID generation and propagation
+5. **Log hygiene** (LOW) — fix format inconsistencies, remove PII
+
+Ask the user which categories to implement.
+
+### G3. Implement
+
+For each approved finding, implement the logging fix.
+
+**Silent failures** — replace empty catches:
+```typescript
+// Before
+catch (e) {}
+
+// After
+catch (e) {
+  logger.error({ err: e, operation: 'fetchUser', userId }, 'Operation failed');
+  throw e;
+}
+```
+
+**Error context** — structured context:
+```python
+# Before
+except Exception as e:
+    logger.error(f"Failed: {e}")
+
+# After
+except Exception as e:
+    logger.error("operation_failed", operation="fetch_user", user_id=user_id, exc_info=True)
+```
+
+**API boundaries** — add middleware or interceptors for request/response logging.
+**Correlation IDs** — request ID middleware that generates and propagates IDs.
+
+Rules:
+- Match the project's existing code style exactly.
+- Use the project's existing logger — never import a competing one.
+- Log at appropriate levels: ERROR for failures, INFO for business events, DEBUG for internals.
+- Structured context (key-value pairs), not string interpolation.
+- Never log sensitive data (passwords, tokens, PII) — redact or omit.
+
+### G4. Verify + Persist
+
+After implementation:
+- Confirm the project still compiles and passes lint.
+- Scan diff with `gitleaks` to ensure no PII or secrets are being logged.
+- Verify log levels are appropriate (no INFO logging in hot paths).
+- Run the test suite to ensure new logging didn't break mocked tests.
+
+Store the generation result:
+```bash
+source artifacts/db.sh
+db_upsert 'log-review' 'generation' "$TARGET_PATH" "files: <list>, fixes: <count>, verified: <pass|fail>"
+```
+
+Report which findings were addressed vs. skipped, and which (if any)
+required manual intervention.
 
 ## Execution Mode
 

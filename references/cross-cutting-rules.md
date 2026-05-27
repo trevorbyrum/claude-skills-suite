@@ -15,6 +15,9 @@ These rules apply to every skill in the suite. Every atomic SKILL.md must follow
 
 3. **Driver boundary (MANDATORY)** — Any skill that dispatches an external agent must use the documented driver interface. The driver is the abstraction layer.
    - **Codex**: Call the `codex-mcp` MCP tools directly (`mcp__codex-mcp__codex_health`, `mcp__codex-mcp__codex_run`, `mcp__codex-mcp__codex_start`, `mcp__codex-mcp__codex_status`, `mcp__codex-mcp__codex_result`, `mcp__codex-mcp__codex_cancel`). Do not construct raw `codex exec` commands or use any legacy shell wrapper.
+     - `codex_health` is a preflight, not the source of truth for an entire run. Prefer `{ "cwd": "<project-root>", "skip_smoke": true }` for fast broker/binary/path checks.
+     - If a health smoke times out, retry once with `smoke_timeout_sec: 120` or launch the intended `codex_start`/`codex_run` job with its normal task timeout. Do not skip all Codex work solely because one health smoke timed out.
+     - Treat Codex as unavailable only after a real task fails/times out or the broker reports a hard configuration error such as missing binary, rejected cwd, or disabled full-access mode.
    - **Copilot**: Load the `/copilot` driver skill for invocation syntax and path resolution.
    - **Sonnet subagents**: Spawn via the Agent tool. Use `isolation: "worktree"` when parallel subagents may touch the same files.
    - Gemini, Cursor, and Vibe drivers have been removed. Anywhere a skill previously dispatched them, replace with Codex MCP (code-centric work) or a Sonnet subagent (research, devil's advocate, web grounding via WebSearch).

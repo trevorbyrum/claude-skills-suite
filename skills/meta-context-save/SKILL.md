@@ -42,16 +42,34 @@ Before writing anything, take stock of:
 - Errors being debugged, including reproduction steps
 - Any important context that would be expensive to re-derive
 
-### Phase 2: Write Compact File
+### Phase 2: Write Compact File (Append-Only)
 
-Store the compact state in the artifact DB:
+Store the compact state in the artifact DB as an **append-only** record.
+Each save is a snapshot — never overwrite previous snapshots. The PreCompact
+hook also writes here, so multiple records accumulate per session.
 
 ```bash
 source artifacts/db.sh
-db_upsert 'meta-context-save' 'compact' 'claude' "$COMPACT_CONTENT"
+TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+db_write 'meta-context-save' 'compact' "claude/$TIMESTAMP" "$COMPACT_CONTENT"
 ```
 
-where `$COMPACT_CONTENT` is the full markdown compact state following the template above.
+where `$COMPACT_CONTENT` is the full markdown compact state following the
+template above. The `claude/` prefix scopes user-invoked saves; the
+PreCompact hook writes lightweight git snapshots to a separate phase
+(`meta-context-save/snapshot/{project}/{ISO-8601}`) — see
+`hooks/pre-compact-save.sh`.
+
+**Latest-snapshot lookup** (for tools that need to read the most recent
+save instead of the full history):
+
+```bash
+LATEST_COMPACT=$(db_read_all 'meta-context-save' 'compact'  | jq -s 'sort_by(.label) | last | .content // empty' -r)
+LATEST_HOOK=$(db_read_all 'meta-context-save' 'snapshot' | jq -s 'sort_by(.label) | last | .content // empty' -r)
+```
+
+`/iterate`'s Phase 1 session wake-up reads both and prefers the most
+recent timestamp.
 
 Construct `$COMPACT_CONTENT` using this template:
 
@@ -101,11 +119,11 @@ Include absolute file paths. The next session may start in a different working d
 
 ### Phase 3: Subagent Review
 
-1. **Read the compact state from the DB** before passing it to the subagent:
+1. **Read the just-written snapshot** before passing it to the subagent:
 
 ```bash
 source artifacts/db.sh
-COMPACT=$(db_read 'meta-context-save' 'compact' 'claude')
+COMPACT=$(db_read 'meta-context-save' 'compact' "claude/$TIMESTAMP")
 ```
 
 **Spawn the `compact-reviewer` agent** (`subagent_type: "compact-reviewer"`) to review the compact state. Pass `$COMPACT` as the compact file contents in the prompt. The agent verifies:
@@ -114,16 +132,43 @@ COMPACT=$(db_read 'meta-context-save' 'compact' 'claude')
    - No references to uncommitted work (Clear mode)
    - No stale file paths or missing context
 
-2. **Correct based on review.** Re-run `db_upsert` with the updated content to address any gaps.
+2. **Correct based on review.** If the snapshot has gaps, write a **revision**
+   as a new append-only record — do NOT mutate the original timestamped record:
+
+   ```bash
+   REVISION_TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+   db_write 'meta-context-save' 'compact' "claude/$REVISION_TS" "$REVISED_CONTENT"
+   ```
+
+   The history is now: original snapshot → reviewer feedback → revised
+   snapshot. Future sessions reading "latest" will get the revised one.
 
 ### Phase 4: Execute
 
 - **Compact mode**: Execute `/compact`. The compact state in the DB is what survives.
 - **Clear mode**: Execute `/clear`. The compact state in the DB and pushed code are what survive.
 
-## Why Overwrite
+## Why Append-Only
 
-`db_upsert` replaces the previous compact record each time because only the latest state matters. The previous record described a context window that no longer exists. Historical session tracking belongs in the plan changelog and cnotes.md.
+Compact records are immutable snapshots, written with `db_write` and
+timestamped labels (`claude/{ISO-8601}`, `hook/{ISO-8601}`,
+`session-end/{ISO-8601}`).
+
+Reasons (per 014D research):
+
+- **Multiple writers**: the PreCompact hook, the SessionEnd hook (once
+  shipped), and the user-invoked skill all write here. Overwrites would
+  race and lose context.
+- **Audit trail**: knowing what state the model thought it was in 3
+  saves ago is sometimes the only way to debug a session that went off
+  the rails.
+- **Cheap**: SQLite + FTS5 makes per-snapshot rows trivial. Retention
+  policy (drop snapshots >30 days, keep the last 10 regardless) is a
+  later concern, not a write-time one.
+
+Tools that want "the current state" read the latest label by sorting.
+Tools that want "what happened this session" read all records since the
+session-start timestamp.
 
 ## Why This Order (Clear mode)
 

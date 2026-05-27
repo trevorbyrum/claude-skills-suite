@@ -55,7 +55,9 @@ execution.
    }
    ```
    Read the final message and factor risks into the plan. If the MCP call
-   fails or `codex_health` is unhealthy, skip and note it.
+   fails or `codex_health` reports a hard broker/config error, skip and note it.
+   Do not skip Codex solely because one health smoke timed out; retry once with
+   `smoke_timeout_sec: 120` or run the real review with the normal timeout.
 
 4. **Define phases.** Break the project into 3-6 phases. Each phase should
    deliver something usable or testable — avoid phases that are purely
