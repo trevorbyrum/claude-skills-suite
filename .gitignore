@@ -1,0 +1,16 @@
+# Runtime artifact store + skill outputs (created by the skills at runtime)
+artifacts/
+*.db
+*.db-wal
+*.db-shm
+
+# Local env / secrets
+.env
+.env.*
+!.env.example
+
+# OS / editor noise
+.DS_Store
+*.swp
+.idea/
+.vscode/

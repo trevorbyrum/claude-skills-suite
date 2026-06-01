@@ -1,0 +1,26 @@
+-- {{PROJECT_NAME}} — authoritative schema
+-- Single source of truth. All ORM models, query builders, and migrations
+-- derive from this file. Update in lockstep with migrations/.
+--
+-- Conventions:
+--   * snake_case for tables and columns
+--   * Plural table names (users, orders, audit_events)
+--   * Surrogate primary key `id` BIGSERIAL / BIGINT unless otherwise justified
+--   * created_at / updated_at TIMESTAMPTZ NOT NULL DEFAULT now() on every table
+--   * Foreign keys named `<referenced_table_singular>_id`
+--   * Indexes named `idx_<table>_<column(s)>` or `uniq_<table>_<column(s)>`
+--
+-- Add tables below. Keep ordered by domain, then alphabetically within a domain.
+
+-- =====================================================================
+-- Domain: <example>
+-- =====================================================================
+
+-- CREATE TABLE example (
+--   id          BIGSERIAL PRIMARY KEY,
+--   name        TEXT NOT NULL,
+--   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+--   updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+-- );
+--
+-- CREATE INDEX idx_example_name ON example (name);
