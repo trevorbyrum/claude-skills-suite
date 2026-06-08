@@ -64,25 +64,12 @@ If ambiguous → `AskUserQuestion` with the three options.
 
 ## Full mode
 
-### Phase A: Research gate (optional)
-
-Run `/research` (standard mode, scoped tight) if **any** of:
-- Change introduces tech/pattern not in the project's stack
-- User describes a problem but doesn't have a clear solution
-- You lack confidence in the best approach
-- Change affects multiple architectural concerns with unclear tradeoffs
-
-Skip research if **all**:
-- Change is straightforward (completed work, scope cut, simple swap)
-- Technologies are already understood in this project
-- User has already made the decision
-
 ### Phase B: Informed discussion
 
-After research (or if multiple valid approaches exist):
+If multiple valid approaches exist:
 
-1. Summarize what you learned relevant to the change.
-2. Present options if tradeoffs exist:
+1. Summarize relevant tradeoffs.
+2. Present options:
    - Option A: [approach] — pros — cons
    - Option B: [approach] — pros — cons
    - Recommendation + why
@@ -91,13 +78,13 @@ After research (or if multiple valid approaches exist):
 
 Skip this phase if the user made a clear, unambiguous decision and just wants docs updated.
 
-### Phase C: Evolve context
+### Phase C: Refresh context
 
 Run the Context-only flow above.
 
 If the change only affected context (glossary update, constraint clarification) with zero plan impact: tell the user and exit.
 
-### Phase D: Evolve plan
+### Phase D: Refresh plan
 
 Run the Plan-only flow above. Pass any new context from Phase C (e.g., Key Decision changes affecting dependencies).
 
@@ -110,7 +97,7 @@ After both phases complete:
    - Context says feature out of scope, plan has work units for it?
    - Context says constraint exists, plan ignores it?
 2. If inconsistencies found, flag to the user and ask which document is correct. Fix before exiting.
-3. **Present summary**: files modified, fields updated, work units affected, research incorporated, inconsistencies resolved.
+3. **Present summary**: files modified, fields updated, work units affected, inconsistencies resolved.
 
 ---
 

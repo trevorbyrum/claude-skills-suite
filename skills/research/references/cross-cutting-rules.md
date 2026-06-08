@@ -1,1 +1,0 @@
-../../../references/cross-cutting-rules.md

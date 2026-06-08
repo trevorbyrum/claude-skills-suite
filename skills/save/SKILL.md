@@ -12,7 +12,7 @@ Preserve session state before compacting or clearing context. Refreshes `project
 - **Compact** (default) — snapshot to DB, then `/compact`
 - **Clear** — `/github-sync` → snapshot to DB → `/clear`
 
-A heavy doc-refresh (full evolve-style architecture or scope rewrite) is on-demand only.
+A heavy doc-refresh (full architecture or scope rewrite) is on-demand only.
 
 ## Inputs
 
@@ -87,7 +87,7 @@ All snapshots written by `/save` and its hooks share the `save` skill namespace:
 
 - `references/compact.md` — snapshot template, DB write, subagent review, `/compact`
 - `references/clear.md` — same chain plus prepended `/github-sync`, ends with `/clear`
-- `references/doc-refresh.md` — heavy evolve-style refresh (research gate, discussion, cross-check). Use only when the user asks explicitly.
+- `references/doc-refresh.md` — heavy doc-refresh (discussion, cross-check). Use only when the user asks explicitly.
 
 ## Examples
 
@@ -105,7 +105,7 @@ User: I'm done for the day
 
 ```
 User: update docs, we switched from REST to GraphQL
-→ Heavy refresh. Phase 1 reads doc-refresh.md: optional research → discussion
+→ Heavy refresh. Phase 1 reads doc-refresh.md: discussion
   → context update → plan update → cross-check. Then ask: compact or clear?
   Then continue to Phase 2.
 ```

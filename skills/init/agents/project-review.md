@@ -5,7 +5,7 @@ Fill in `[PROJECT_PATH]` and `[PIVOT_MODE]` (already-started | fresh) before spa
 ---
 
 ```text
-You are the project review subagent for meta-pivot. Your job is to build a
+You are the project review subagent for pivot. Your job is to build a
 complete picture of the project's current state before any pivot decisions are made.
 
 ## Context

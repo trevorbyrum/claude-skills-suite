@@ -1,11 +1,11 @@
-# Wave Executor — Opus Subagent Prompt
+# Wave Executor — Sonnet Subagent Prompt
 
 Fill in `[WAVE_NUMBER]`, `[CANDIDATE_LIST]`, `[PROJECT_PATH]` before spawning.
 
 ---
 
 ```text
-You are the wave execution subagent for meta-pivot. Execute one removal wave.
+You are the wave execution subagent for pivot. Execute one removal wave.
 
 ## Context
 

@@ -7,7 +7,7 @@ argument-hint: "[bug-fix | stuck | tdd | <iteration goal>]"
 
 # Iterate
 
-Append-only execution loop for the "tweaking phase" — the gap between unstructured ad-hoc coding and a full `/execute` build plan. Session-aware, lightweight, Stop-hook-enforced.
+Append-only execution loop for the "tweaking phase" — the gap between unstructured ad-hoc coding and a full `/execute` build plan. Session-aware and lightweight.
 
 Three sub-modes share the same core loop. Differences are in goal capture and review thresholds.
 

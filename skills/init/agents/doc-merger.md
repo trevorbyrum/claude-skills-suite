@@ -91,8 +91,7 @@ Add `[sub:<name>]` in the rationale.
 **Tech Stack**: If the sub-project introduced new dependencies not in the
 parent's Tech Stack, add them.
 
-**Changelog**: Append entry following the format in
-`../../references/evolve-context-diff.md` (if available) or use:
+**Changelog**: Append entry using this format:
 
 ```markdown
 ### YYYY-MM-DD — CLAUDE

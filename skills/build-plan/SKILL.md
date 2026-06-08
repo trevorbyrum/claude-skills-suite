@@ -14,7 +14,7 @@ Take project context (and research, if available) and produce a comprehensive pl
 | Input | Source | Required |
 |---|---|---|
 | `project-context.md` | Project root | Yes (full mode) |
-| Research synthesis at `artifacts/research/*/synthesis.md` | `/research` output | Optional (improves accuracy) |
+| Research synthesis at `artifacts/research/*/synthesis.md` | Prior research runs (if any) | Optional (improves accuracy) |
 | Existing `project-plan.md` | Project root | Required for update mode |
 | User's scope description | Prompt | Required for lightweight mode |
 

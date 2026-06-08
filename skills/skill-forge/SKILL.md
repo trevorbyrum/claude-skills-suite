@@ -112,10 +112,9 @@ Follow the template exactly. Key rules:
 - Execution Mode section (standalone + as part of `/review`)
 - Pattern A output (DB)
 
-**If the new skill dispatches external agents** (Sonnet subagents, Opus subagents):
-- Sonnet subagents (most common): use `Agent` tool with `subagent_type: "general-purpose"` per cross-cutting rule 3 + rule 11.
-- Codex MCP: **NOT allowed in any vclaude skill body.** Skills must never call `mcp__codex-mcp__*`. Any skill that tries to use Codex in its body is invalid.
-- Opus subagents: use sparingly per rule 3 (expensive). Reserved for heavy orchestration.
+**If the new skill dispatches external agents** (Sonnet subagents):
+- Sonnet subagents (the only out-of-thread option): use `Agent` tool with `subagent_type: "general-purpose"` per cross-cutting rule 3 + rule 11.
+- No skill in vclaude calls Codex MCP. All model calls go through Claude main thread or Sonnet subagents.
 - All multi-unit dispatch must follow rule 11 (parallel-by-default, max-impact-per-agent, debate-the-whole-in-pieces).
 - Read cross-cutting-rules.md sections 2, 3, 6, 11 before authoring dispatch logic.
 

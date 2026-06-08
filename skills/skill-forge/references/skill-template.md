@@ -21,14 +21,14 @@ disable-model-invocation: true
   - **Specific trigger phrases** ("Use when...", "Invoke with /name or when user says...")
   - **≤ 250 characters** — over this is truncated
   - **No always-on language** — "Runs after X" or "Triggers whenever Y" reads as a standing instruction and causes loops. Use explicit invocation.
-- **`disable-model-invocation: true`** on every lifecycle skill (`/init`, `/research`, `/build-plan`, `/execute`, `/iterate`, `/review`, `/save`). These are user-triggered only. Action skills (`/github-sync`, `/skill-forge`) stay auto-invocable.
+- **`disable-model-invocation: true`** on every lifecycle skill (`/init`, `/build-plan`, `/execute`, `/iterate`, `/review`, `/save`). These are user-triggered only. Action skills (`/github-sync`, `/skill-forge`) stay auto-invocable.
 - **`argument-hint`**: shown during autocomplete. Omit if the skill takes no arguments.
 
 ### Optional Advanced Fields
 
 ```yaml
 # user-invocable: false              # Hides from / menu. Default: true.
-# model: claude-opus-4-7             # Model override.
+# model: claude-opus-4-8             # Model override.
 # effort: low | medium | high | max  # Effort level override.
 # context: fork                      # Run in a forked subagent context.
 # agent: <subagent-type>             # Subagent type; requires context: fork.

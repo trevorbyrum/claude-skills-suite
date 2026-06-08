@@ -64,9 +64,9 @@ For each record from the sub-project DB, apply two transformations:
 **3.1 Namespace the skill field**:
 Prefix with `sub:[SUB_PROJECT_NAME]/`:
 ```
-research-execute → sub:[SUB_PROJECT_NAME]/research
-meta-deep-research-execute → sub:[SUB_PROJECT_NAME]/research deep-execute
-clean-project → sub:[SUB_PROJECT_NAME]/clean-project
+review → sub:[SUB_PROJECT_NAME]/review
+build-plan → sub:[SUB_PROJECT_NAME]/build-plan
+impact-analysis → sub:[SUB_PROJECT_NAME]/impact-analysis
 ```
 
 **3.2 Apply renumbering to label field**:
@@ -153,8 +153,8 @@ Report the merge results:
 ### Namespaces Created
 | Skill (namespaced) | Phase | Record Count |
 |--------------------|-------|-------------|
-| sub:[SUB_PROJECT_NAME]/research | findings | 5 |
-| sub:[SUB_PROJECT_NAME]/clean-project | findings | 2 |
+| sub:[SUB_PROJECT_NAME]/review | findings | 5 |
+| sub:[SUB_PROJECT_NAME]/build-plan | findings | 2 |
 ```
 
 Write this report to: `/tmp/init-merge-db-[SUB_PROJECT_NAME].md`

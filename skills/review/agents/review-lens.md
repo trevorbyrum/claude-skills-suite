@@ -36,7 +36,7 @@ Phase 1.5 ran whichever local linters and secret scanners are installed (typical
 [INSERT $SAST_SUMMARY FROM PHASE 1.5 — TRUNCATED TO ~5000 CHARS, KEEPING CRITICAL/HIGH + ALL GITLEAKS]
 
 For your lens, check whether any of these SAST findings overlap your scope:
-- **Confirm** — your scan also caught it: include in findings, cite "also-flagged-by: gitleaks/biome/oxlint/ruff/clippy"
+- **Confirm** — your scan also caught it: include in findings, cite "also-flagged-by: gitleaks/biome/oxlint/ruff/clippy/semgrep/trivy"
 - **Dispute** — false positive: include at LOW severity with rationale
 - **Expand** — the linter caught one instance, you found related ones: surface the broader pattern
 

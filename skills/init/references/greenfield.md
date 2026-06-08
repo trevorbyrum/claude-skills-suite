@@ -179,15 +179,15 @@ Append per-language defaults as the project evolves.
 
 Ask via `AskUserQuestion`:
 
-> "Run `/research` before planning? Standard mode (~10-15 min) validates tech choices and surfaces risks. Skip if you've already done your homework."
+> "Run a research pass before planning? Spawns Sonnet subagents (~10-15 min) to validate tech choices and surface risks. Skip if you've already done your homework."
 
-If yes: hand off to `/research`. Synthesis lands locally at `artifacts/research/001-<topic>/synthesis.md`. Return to Phase 2f when complete.
+If yes: spawn Sonnet research subagents to validate tech choices and surface risks (use WebSearch). Synthesis lands locally at `artifacts/research/001-<topic>/synthesis.md`. Return to Phase 2f when complete.
 
 If no: continue to Phase 2f.
 
 ## Phase 2f: Plan
 
-Hand off to `/build-plan` from-scratch mode. It reads `project-context.md` (and any research synthesis) and produces `project-plan.md`. The user approves before this skill writes the file.
+Hand off to `/build-plan` from-scratch mode. It reads `project-context.md` (and any research synthesis from `artifacts/research/`) and produces `project-plan.md`. The user approves before this skill writes the file.
 
 After Phase 2f, return to SKILL.md Phase 3 (DB init).
 

@@ -9,7 +9,7 @@ For small in-session scope (formerly `/quick-plan`). No phases, no critical path
 | Adding a single feature (dark mode toggle, new endpoint) | A new project or major feature flow |
 | Fixing a multi-step bug | Anything spanning > 1 day or > 10 file changes |
 | Spike or experiment | Anything that needs `/execute` parallelism |
-| In-session scoping before `/iterate` | Anything that benefits from `/research` first |
+| In-session scoping before `/iterate` | Anything that benefits from up-front research |
 
 Heuristic: if you can describe the goal in one sentence and the checklist fits in ≤ 7 bullets, lightweight is fine.
 

@@ -5,7 +5,7 @@ Fill in `[PROJECT_PATH]` and `[PIVOT_SUMMARY_PATH]` before spawning.
 ---
 
 ```text
-You are the documentation update subagent for meta-pivot. Update all project
+You are the documentation update subagent for pivot. Update all project
 docs to reflect what actually happened during the pivot execution.
 
 ## Context

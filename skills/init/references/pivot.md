@@ -11,20 +11,20 @@ in risk-ordered waves — while keeping humans in the loop for every irreversibl
 choice.
 
 **Context-window strategy**: Main thread handles orchestration + human gates only.
-Heavy analysis dispatched to a single Opus subagent. Adversarial debate runs between
+Heavy analysis dispatched to a single Sonnet subagent. Adversarial debate runs between
 two Sonnet subagents (one steelmanning "keep," one steelmanning "cut") judged by the
-main thread. Wave execution via Opus subagent per wave. Never load atomic skill files
+main thread. Wave execution via Sonnet subagent per wave. Never load atomic skill files
 into main context — subagents read them.
 
 ```text
 Delegation key:
   [I] = inline      — stays in main thread, user interaction
-  [S] = subagent    — Opus or Sonnet, runs out of main context
+  [S] = subagent    — Sonnet, runs out of main context
 
   Project Review[S:Sonnet] + Mode Detect[I] -> Interview[I]
-    -> Context Rewrite[I] -> Deep Analysis[S:Opus]
-    -> Adversarial I[S:Two Sonnet] -> Triage[I] -> Adversarial II[S:Two Sonnet]
-    -> Decision Log[I] -> Wave Execution[S:Opus per wave]
+    -> Context Rewrite[I] -> Deep Analysis[S:Sonnet]
+    -> Adversarial I[S:Two Sonnet, opt-in] -> Triage[I] -> Adversarial II[S:Two Sonnet]
+    -> Decision Log[I] -> Wave Execution[S:Sonnet per wave]
     -> Verification[S:Sonnet] -> /review[skill] -> Doc Update[S:Sonnet]
 ```
 
@@ -60,7 +60,7 @@ Main thread reads temp files, persists to DB, and appends to pivot-summary.md.
 | impact-analysis | dep-graph | latest | Dependency graph summary |
 | scope-triage | triage | latest | RICE-scored + MoSCoW table |
 | surgical-remove | wave-log | wave-{N} | Per-wave execution log |
-| meta-pivot | summary | {timestamp} | Full pivot-summary snapshot |
+| init-pivot | summary | {timestamp} | Full pivot-summary snapshot |
 
 ## Instructions
 
@@ -158,9 +158,9 @@ This phase depoisons all project documentation so downstream agents read the
 **Exit condition**: project-context.md and project-plan.md reflect the new direction.
 User has approved the changes. Secondary docs are updated.
 
-### Phase 3: Deep Analysis [S, Opus]
+### Phase 3: Deep Analysis [S, Sonnet]
 
-Dispatch an Opus subagent using the prompt template in `agents/deep-analysis.md`.
+Dispatch a Sonnet subagent using the prompt template in `agents/deep-analysis.md`.
 Fill in placeholders: `[PROJECT_PATH]`, `[DIRECTION_SUMMARY]`.
 
 The subagent reads `references/impact-analysis.md` (nested under this skill)
@@ -184,9 +184,15 @@ db_upsert 'impact-analysis' 'dep-graph' 'latest' "$(cat /tmp/pivot-analysis-depg
 Generate draft `artifacts/general/pivot-plan.md` from `templates/pivot-plan-template.md`
 with the candidate list and blast radius data. Append Phase 3 results to pivot-summary.md.
 
-### Phase 3.5: Adversarial Challenge I [S, Two Sonnet subagents]
+### Phase 3.5: Adversarial Challenge I [S, Two Sonnet subagents — OPT-IN]
 
-Before presenting candidates to the user, challenge them with two adversarial Sonnet subagents — one steelmanning "cut these," one steelmanning "keep these." See `agents/adversarial-debate.md` for the full prompts.
+Ask the user via `AskUserQuestion`:
+
+> "Run a pre-triage adversarial challenge? (default: no — skip to Phase 4)"
+
+If the user declines or does not respond affirmatively, skip Phase 3.5 entirely and proceed directly to Phase 4. Note "skipped (opt-in)" in pivot-summary.md for the Phase 3.5 section.
+
+If the user confirms, run the adversarial challenge: two Sonnet subagents — one steelmanning "cut these," one steelmanning "keep these." See `agents/adversarial-debate.md` for the full prompts.
 
 Write the shared debate context to `/tmp/pivot-debate-candidates.md` containing:
 - The direction summary from Phase 1
@@ -277,11 +283,11 @@ to pivot-summary.md instead.
 Update `artifacts/general/pivot-plan.md` with the final approved removal list,
 wave assignments, and rollback strategy.
 
-### Phase 6: Wave Execution [S, Opus per wave]
+### Phase 6: Wave Execution [S, Sonnet per wave]
 
 For each wave (1 through 4, or single wave for pre-prod shortcut):
 
-1. Dispatch an Opus subagent using `agents/wave-executor.md`. Fill in:
+1. Dispatch a Sonnet subagent using `agents/wave-executor.md`. Fill in:
    `[WAVE_NUMBER]`, `[CANDIDATE_LIST]`, `[PROJECT_PATH]`.
 2. The subagent reads `references/surgical-remove.md` (nested) and executes
    the wave protocol.
@@ -351,9 +357,7 @@ acknowledged. Results logged.
 
 ### Phase 9: Final Doc Update [S, Sonnet]
 
-Dispatch a Sonnet subagent using `agents/doc-update.md`. The subagent reads
-evolve SKILL.md and updates all project docs to reflect what actually happened
-during execution (the plan rarely survives contact intact).
+Dispatch a Sonnet subagent using `agents/doc-update.md`. Follow the doc-update instructions in `agents/doc-update.md`. The subagent updates all project docs to reflect what actually happened during execution (the plan rarely survives contact intact).
 
 Subagent writes results to `/tmp/pivot-doc-update.md`. Main thread appends
 final section to pivot-summary.md.
@@ -363,7 +367,7 @@ Present completion summary to user:
 > - {N} files removed across {N} waves
 > - {N} external dependencies addressed
 > - {N} ADRs logged
-> - meta-review: {N} findings ({N} critical/high resolved)
+> - /review: {N} findings ({N} critical/high resolved)
 > - Documentation updated
 > - Full audit trail: `artifacts/general/pivot-summary.md`
 
@@ -373,10 +377,10 @@ the completion summary.
 ## Error Handling
 
 - **project-context.md missing**: Tell user to run `/project-context` or `/init` first.
-- **Opus subagent fails/times out**: Read whatever temp files exist. Present partial results. Offer to retry or proceed with what's available.
-- **Both adversarial reviewers fail**: Fall back to 2 Sonnet subagents. Never skip adversarial review entirely.
+- **Sonnet subagent fails/times out**: Read whatever temp files exist. Present partial results. Offer to retry or proceed with what's available.
+- **Both adversarial reviewers fail**: Surface to user; pivot pauses. Phase 3.5 is opt-in and can be skipped entirely by the user.
 - **Wave execution fails mid-wave**: Branch is preserved for inspection. User can rollback, fix manually, or retry.
-- **User wants to stop early**: Any phase can be the last. Save state to pivot-summary.md. User can resume with `/init (pivot mode) --resume`.
+- **User wants to stop early**: Any phase can be the last. Save state to pivot-summary.md. Resume with `/init`; it detects partial pivot state and offers to continue via meta-skill-guards.md.
 
 ## References (on-demand)
 
@@ -397,9 +401,9 @@ Helper scripts:
 Agent prompt templates:
 
 - `agents/project-review.md` — Sonnet subagent for Phase 1 project analysis
-- `agents/deep-analysis.md` — Opus subagent for Phase 3
-- `agents/adversarial-debate.md` — two-Sonnet-subagent debate protocol for Phases 3.5, 4.5
-- `agents/wave-executor.md` — Opus subagent for Phase 6
+- `agents/deep-analysis.md` — Sonnet subagent for Phase 3
+- `agents/adversarial-debate.md` — two-Sonnet-subagent debate protocol for Phases 3.5 (opt-in), 4.5
+- `agents/wave-executor.md` — Sonnet subagent for Phase 6
 - `agents/verification.md` — Sonnet subagent for Phase 7
 - `agents/doc-update.md` — Sonnet subagent for Phase 8
 

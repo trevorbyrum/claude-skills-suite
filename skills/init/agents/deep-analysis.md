@@ -1,11 +1,11 @@
-# Deep Analysis — Opus Subagent Prompt
+# Deep Analysis — Sonnet Subagent Prompt
 
 Fill in `[PROJECT_PATH]` and `[DIRECTION_SUMMARY]` before spawning.
 
 ---
 
 ```text
-You are the deep analysis subagent for meta-pivot. Your job is to analyze the
+You are the deep analysis subagent for pivot. Your job is to analyze the
 codebase and produce a ranked list of removal candidates with blast radius data.
 
 ## Context

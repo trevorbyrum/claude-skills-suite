@@ -11,7 +11,7 @@ Reference for skill-forge. Validate every skill against this checklist before fi
 | F3 | Description uses third person | WARN | Starts with "Evaluates", "Commits", not "Evaluate", "Commit" |
 | F4 | Description includes trigger phrases | WARN | Contains "Use when", "Invoke with /name", or natural trigger words |
 | F5 | No always-on language | FAIL | Flag: "Runs after", "Triggers whenever", "Applies when", "Automatically" — these cause loops |
-| F6 | `disable-model-invocation: true` on lifecycle skills | FAIL | Required on `/init`, `/research`, `/build-plan`, `/execute`, `/iterate`, `/review`, `/save` |
+| F6 | `disable-model-invocation: true` on lifecycle skills | FAIL | Required on `/init`, `/build-plan`, `/execute`, `/iterate`, `/review`, `/save` |
 | F7 | No unrecognized frontmatter fields | WARN | Valid: `name`, `description`, `argument-hint`, `disable-model-invocation`, `user-invocable`, `allowed-tools`, `model`, `effort`, `context`, `agent`, `hooks`, `paths`, `shell` |
 
 ## Structure Checks
@@ -46,8 +46,8 @@ Reference for skill-forge. Validate every skill against this checklist before fi
 |---|---|---|---|
 | A1 | **Stale file references** | FAIL | Outputs says `db_upsert` but instructions say "Write to the output file" — causes wrong write target |
 | A2 | **Subagent DB writes** | FAIL | Instructions tell Sonnet subagents to call `db_upsert` — subagents don't have access to `references/db.sh`. Main thread does all DB writes |
-| A3 | **External AI driver calls** | FAIL | This suite is local-only. Skills must NOT call Codex, Copilot, Gemini, or any external review service. Use Sonnet subagents (`Agent` tool, `subagent_type: "general-purpose"`) for all out-of-thread work |
-| A4 | **References to removed skills** | FAIL | Mentions `/meta-execute`, `/meta-review`, `/meta-init`, `/evolve`, `/skill-doctor`, `/sync-skills`, `/copilot`, `/quick-plan`, `/claude-md-update`, etc. — those have been dropped |
+| A3 | **External AI driver calls** | FAIL | No Codex anywhere in vclaude. Skills must NOT call Codex, Copilot, Gemini, or any external review service. Use Sonnet subagents (`Agent` tool, `subagent_type: "general-purpose"`) for all out-of-thread work |
+| A4 | **References to removed skills** | FAIL | Mentions `/meta-execute`, `/meta-review`, `/meta-init`, `/evolve`, `/skill-doctor`, `/sync-skills`, `/copilot`, `/quick-plan`, `/claude-md-update`, `/research`, `/drift-review`, `/completeness-review`, `/clean-project`, `/compliance-review`, `/meta-context-save`, `/meta-pivot`, etc. — those have been dropped |
 | A5 | **Non-portable timeout** | WARN | Resolve `gtimeout` (macOS/coreutils) OR `timeout` (Linux/GNU), whichever exists; fall back to running without a wrapper. Never hardcode an absolute path like `/opt/homebrew/bin/gtimeout` — it breaks every Linux user |
 | A6 | **External MCP dependencies** | FAIL | Skills must NOT require homelab-specific MCP servers (arbytr Obsidian, Qdrant memory, SonarQube, Semgrep MCP). The suite runs on what ships with Claude Code plus standard CLI tools |
 | A7 | **Always-on description** | FAIL | Description reads as standing instruction — causes loops. Use explicit invocation language |
@@ -70,7 +70,7 @@ Reference for skill-forge. Validate every skill against this checklist before fi
 
 | # | Check | Severity | When Applies |
 |---|---|---|---|
-| B1 | Sonnet subagents spawned via `Agent` tool | WARN | Use `subagent_type: "general-purpose"`. No Codex, no Copilot, no Gemini |
+| B1 | Sonnet subagents spawned via `Agent` tool | WARN | Use `subagent_type: "general-purpose"`. No Codex MCP anywhere in vclaude — no Copilot, no Gemini |
 | B2 | `isolation: "worktree"` for parallel subagents | WARN | When parallel subagents may touch the same files |
 | B3 | Subagent prompts include curated context | WARN | Aim for 10-50k tokens of focused inputs, not the full codebase |
 | B4 | Fallback behavior specified | WARN | What happens if the subagent dispatch fails or returns empty |
@@ -98,7 +98,7 @@ Reference for skill-forge. Validate every skill against this checklist before fi
 ## Naming Conventions
 
 - Skill directories: `lowercase-hyphenated` (e.g., `test-review`, `github-sync`)
-- Review lenses: `<area>-review` suffix (e.g., `security-review`, `completeness-review`)
+- Review lenses: `<area>-review` suffix (e.g., `security-review`, `test-review`)
 - Action skills: verb or verb-noun (e.g., `github-sync`, `skill-forge`)
 - Lifecycle skills: bare verb (e.g., `init`, `execute`, `review`, `save`)
 

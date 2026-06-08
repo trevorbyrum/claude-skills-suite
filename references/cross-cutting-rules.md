@@ -8,7 +8,7 @@ These rules apply to every skill in the suite. Every SKILL.md must follow them b
 
 2. **Concurrency** — Sonnet subagents (`Agent` tool, `subagent_type: "general-purpose"`) have no hard concurrency limit; the Claude runtime manages parallelism. When fanning out reviewers, research workers, or rubric checks, prefer batching multiple `Agent` calls in a single tool-use block over launching one-by-one — the runtime parallelizes them automatically.
 
-3. **Execution model (MANDATORY)** — Claude (main thread) writes code, edits files, and orchestrates. Sonnet subagents handle parallel/heavy work — research workers, devil's advocate, rubric review, lens reviewers in `/review`, web grounding via WebSearch. Use `isolation: "worktree"` when parallel subagents may touch the same files. There is no Codex/Copilot/Gemini integration in this suite — every model call is either main-thread Claude or a Sonnet subagent. Reviews are user-triggered via `/review`; there is no automatic background review hook.
+3. **Execution model (MANDATORY)** — Claude (main thread) writes code, edits files, and orchestrates. Sonnet subagents handle parallel/heavy work — devil's advocate, rubric review, lens reviewers in `/review`, web grounding via WebSearch. Use `isolation: "worktree"` when parallel subagents may touch the same files. There is no Codex/Copilot/Gemini integration in this suite — every model call is either main-thread Claude or a Sonnet subagent. Two review paths: user-triggered `/review` for full multi-lens analysis; automatic per-edit background review via the save-hook (`hooks/save-hook/`) that runs a Sonnet pass on code-touching saves. Set `VCLAUDE_AUTOREVIEW=0` to disable the background pass.
 
 4. **Storage layout** — All persisted artifacts stay local under the project's `artifacts/` directory.
    - SQLite + FTS5 artifact DB at `artifacts/project.db` (wrapper: `references/db.sh`)
@@ -58,8 +58,6 @@ These rules apply to every skill in the suite. Every SKILL.md must follow them b
 9. **Worker budget per task (MANDATORY)** — Cap the number of attempts for any single work unit or fix:
    - `/execute` linear or single-WU: **5** attempts per WU before pausing and surfacing to the user
    - `/execute` review-fix: **3** attempts per finding
-   - `/research` worker: 1 attempt; failure → note in synthesis (no automatic retry)
-   - `/research` deep mode debate: 3 rounds TOTAL (position / challenge / response) across the WHOLE synthesis — see rule 11. NOT per-claim. If a single finding genuinely needs adversarial deep-dive beyond the whole-synthesis debate, that targeted check gets 2 rounds.
 
    When a budget is hit, **never silently retry beyond it.** Stop, log a verdict (PARTIAL or FAIL), surface to the user.
 
@@ -87,11 +85,9 @@ These rules apply to every skill in the suite. Every SKILL.md must follow them b
 
     An adversarial debate is allowed — and encouraged — to have multiple pieces: perspectives, rounds, lenses, attack angles. Each piece is a meaningful slice of the *debate*, not of the *subject under review*.
 
-    Legacy `/research` deep Phase 3: 3 models × 3 rounds = **9 TOTAL dispatches**. The 9 are pieces of the debate (Round 1 = position paper, Round 2 = challenge, Round 3 = response — each model takes each role). But every one of the 9 engages with the ENTIRE synthesis. The structure has many pieces; every piece reads the whole.
+    The failure mode is the reverse: shredding the SUBJECT into pieces and debating each piece in isolation. That multiplies dispatches by N findings, each reviewer loses cross-finding pattern recognition, and the synthesis-level signal collapses.
 
-    The failure mode is the reverse: shredding the SUBJECT into pieces and debating each piece in isolation. That multiplies dispatches by N findings, each reviewer loses cross-finding pattern recognition, and the synthesis-level signal collapses. This is what caused the 93-agent explosion in this project — debate was applied per-claim instead of per-synthesis.
-
-    Rule: structure the debate however richly you want (multi-round, multi-model, multi-lens, adversarial vs friendly), but **each debater must engage with the WHOLE thing under review, not a sliver of it.**
+    Rule: structure the debate however richly you want (multi-round, multi-lens, adversarial vs friendly), but **each debater must engage with the WHOLE thing under review, not a sliver of it.**
 
     If a specific finding needs deeper scrutiny than the whole-synthesis debate provides, surface it explicitly with its own targeted check — but make that a deliberate per-finding decision, not the default shape of the debate.
 

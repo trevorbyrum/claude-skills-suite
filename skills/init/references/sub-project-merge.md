@@ -335,9 +335,9 @@ Present the summary:
 > - **Archived to**: `artifacts/archived-sub-projects/<name>/`
 >
 > Suggested follow-ups:
-> - `/compliance-review` — verify parent conventions after merge
-> - `/drift-review` — check docs match current code state
-> - `/evolve` — update project-context.md if scope changed
+>
+> - `/review` — verify parent conventions and check docs match current code state after merge
+> - `/save` doc-refresh — update project-context.md if scope changed
 
 Log to `cnotes.md` per cross-cutting rules.
 

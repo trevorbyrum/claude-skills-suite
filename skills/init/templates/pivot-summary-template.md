@@ -56,8 +56,8 @@ Never edit previous sections — only append new ones.
 
 ---
 
-## Phase 3.5: Adversarial Challenge I
-<!-- Appended after Phase 3.5 completes -->
+## Phase 3.5: Adversarial Challenge I (opt-in — skipped if user declined)
+<!-- Appended after Phase 3.5 completes, or "skipped (opt-in)" if user declined -->
 
 **Timestamp**: {{ISO-8601}}
 
@@ -144,7 +144,7 @@ Never edit previous sections — only append new ones.
 **Lenses run**: {{count}} (Sonnet subagent lenses)
 **Findings**: CRITICAL ({{N}}), HIGH ({{N}}), MEDIUM ({{N}}), LOW ({{N}})
 **Critical/High resolved**: {{N}} of {{N}}
-**review-fix invoked**: yes/no
+**/execute fix invoked**: yes/no
 **Deferred to follow-up**: {{list or none}}
 
 ---

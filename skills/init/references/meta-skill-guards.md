@@ -9,7 +9,7 @@ Shared timeout and stall-detection rules for `/init`'s multi-phase paths. These 
 | Sonnet scaffold subagent | 180s | Scaffolding is bounded — file writes only |
 | Sonnet context-write subagent | 240s | Drafting synthesis from interview notes |
 | Sonnet adversarial-review subagent (pivot) | 180s | Reading existing docs + categorizing |
-| `/research` standard mode | 1200s (20 min) | Bounded by `/research`'s own internal time-boxing |
+| Sonnet research worker subagents | 1200s (20 min) | Time-box each worker; main orchestrator waits |
 | Inline interview | No timeout | User-paced |
 
 If a subagent exceeds its timeout, save partial output (if any) to `artifacts/init-<phase>-partial.md` and surface to the user. Don't retry automatically.

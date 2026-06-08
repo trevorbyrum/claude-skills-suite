@@ -77,7 +77,7 @@ Across all paths, certain phases recur — they're documented inline in each ref
 
 - **Interview** (inline, interactive) — uses `agents/questions.md` for the prompt structure
 - **Write `project-context.md`** (inline OR via `agents/context-write.md` subagent)
-- **Research plan** (optional, dispatches `/research` or skips with a note)
+- **Research plan** (optional, spawns Sonnet research subagents or skips with a note)
 - **Build plan** (calls `/build-plan` from-scratch mode)
 
 See `references/meta-skill-guards.md` for shared timeout and stall-detection rules used across these multi-phase paths.

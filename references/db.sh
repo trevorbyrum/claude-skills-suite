@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # db.sh — Artifact store helper for skill suite projects.
 #
-# Usage: source artifacts/db.sh   (from project root)
+# Usage: source references/db.sh   (from project root)
 #
 # Functions:
 #   db_init                           — create DB + schema if not exists
